@@ -1,0 +1,3 @@
+order_id,supplier_id,component_id,ordered_quantity,received_quantity,unit_price,order_date,expected_delivery,status
+PO-X7-1001,SUP-A,MOTOR-X7,1000,0,100,2026-01-05,2026-01-20,DELAYED
+PO-Z2-2001,SUP-F,CONTROL-Z2,800,200,42,2026-01-08,2026-01-18,PARTIALLY_RECEIVED

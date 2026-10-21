@@ -1,0 +1,7 @@
+supplier_id,supplier_name,component_id,unit_price,lead_time_days,available_capacity,capacity_period,quality_score,reliability_score,on_time_delivery_rate,location,status,expedite_supported,expedite_lead_time_days,expedite_unit_surcharge
+SUP-A,Supplier A,MOTOR-X7,100,10,1400,30_DAYS,94,72,0.78,"Pune, IN",ACTIVE,false,,
+SUP-B,Supplier B,MOTOR-X7,118,4,450,30_DAYS,91,93,0.96,"Chennai, IN",ACTIVE,false,,
+SUP-C,Supplier C,MOTOR-X7,91,24,1200,30_DAYS,86,81,0.84,"Shenzhen, CN",ACTIVE,false,,
+SUP-D,Supplier D,MOTOR-X7,108,6,250,30_DAYS,97,90,0.94,"Bengaluru, IN",ACTIVE,true,3,22
+SUP-E,Supplier E,MOTOR-X7,84,5,900,30_DAYS,74,76,0.8,"Hanoi, VN",QUALITY_HOLD,false,,
+SUP-F,Supplier F,CONTROL-Z2,42,7,2000,30_DAYS,95,94,0.97,"Noida, IN",ACTIVE,false,,

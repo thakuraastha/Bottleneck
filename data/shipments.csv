@@ -1,0 +1,3 @@
+shipment_id,order_id,shipped_quantity,received_quantity,shipment_status,dispatch_date,original_eta,revised_eta,transport_mode,route
+SHP-X7-1001,PO-X7-1001,1000,0,DELAYED_IN_TRANSIT,2026-01-10,2026-01-20,2026-01-30,ROAD,Pune Supplier Hub -> WH-PUNE
+SHP-Z2-2001,PO-Z2-2001,800,200,IN_TRANSIT,2026-01-12,2026-01-18,2026-01-18,ROAD,Noida -> WH-PUNE

@@ -1,0 +1,33 @@
+services:
+  api:
+    build: .
+    command: ["python", "scripts/start_api.py"]
+    environment:
+      BOTTLENECK_DATABASE_URL: sqlite:////data/bottleneck.db
+      BOTTLENECK_DATA_DIR: /app/data
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    volumes:
+      - bottleneck-data:/data
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  dashboard:
+    build:
+      context: ./frontend/dashboard
+    environment:
+      BOTTLENECK_API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+volumes:
+  bottleneck-data:

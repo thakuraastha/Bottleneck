@@ -1,0 +1,3 @@
+production_line_id,component_id,component_units_per_product,daily_production_capacity,planned_daily_output,downtime_cost_per_day,priority
+LINE-1,MOTOR-X7,1,120,100,25000,1
+LINE-2,CONTROL-Z2,2,140,100,18000,2

@@ -1,0 +1,3 @@
+component_id,warehouse_id,on_hand_quantity,reserved_quantity,safety_stock,last_updated
+MOTOR-X7,WH-PUNE,650,50,200,2026-01-15T08:00:00+00:00
+CONTROL-Z2,WH-PUNE,900,100,250,2026-01-15T08:00:00+00:00
