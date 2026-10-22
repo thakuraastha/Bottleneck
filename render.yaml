@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: bottleneck-agentic
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerCommand: python scripts/start_api.py
+    healthCheckPath: /health
+    envVars:
+      - key: BOTTLENECK_DATABASE_URL
+        value: sqlite:////tmp/bottleneck.db
+      - key: BOTTLENECK_DATA_DIR
+        value: /app/data
+      - key: BOTTLENECK_ENVIRONMENT
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false

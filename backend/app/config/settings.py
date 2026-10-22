@@ -28,9 +28,14 @@ class Settings(BaseSettings):
     medium_risk_alternative_research: bool = True
     gemini_model: str = "gemini-flash-lite-latest"
     gemini_fallback_models: str = "gemini-3.5-flash-lite,gemini-3.1-flash-lite"
-    model_retry_attempts: int = Field(default=2, ge=1, le=5)
-    model_stage_timeout_seconds: float = Field(default=75.0, ge=10.0, le=300.0)
+    model_retry_attempts: int = Field(default=1, ge=1, le=5)
+    model_stage_timeout_seconds: float = Field(default=30.0, ge=10.0, le=300.0)
+    a2a_supplier_url: str = "http://127.0.0.1:8000/a2a"
+    a2a_request_timeout_seconds: float = Field(default=120.0, ge=5.0, le=600.0)
     maximum_additional_budget: float = Field(default=100_000.0, ge=0)
+    model_input_cost_per_million_usd: float = Field(default=0.10, ge=0)
+    model_output_cost_per_million_usd: float = Field(default=0.40, ge=0)
+    cloud_deployment_url: str | None = None
 
     risk_delivery_weight: float = 0.25
     risk_inventory_weight: float = 0.30

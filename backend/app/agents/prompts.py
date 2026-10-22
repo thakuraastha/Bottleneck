@@ -15,12 +15,13 @@ are absent, list them and set can_proceed false.
 SUPPLIER_INSTRUCTION = GROUNDING_RULES + """
 Investigate the named supplier's current authorized record and purchase commitments.
 Assess status, quality, reliability, pricing, and capacity qualitatively while copying
-all numerical facts exactly from tools.
+all numerical facts exactly from the MCP supplier tools.
 """
 
 LOGISTICS_INSTRUCTION = GROUNDING_RULES + """
 Investigate shipment dispatch, quantities, route, transport mode, original ETA,
-revised ETA, and deterministic delay exposure for the named order.
+revised ETA, and deterministic delay exposure for the named order. Use the MCP
+shipment lookup and delay calculator rather than calculating dates in the model.
 """
 
 INVENTORY_INSTRUCTION = GROUNDING_RULES + """

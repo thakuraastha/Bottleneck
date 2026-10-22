@@ -7,6 +7,7 @@ from google.adk.agents import LlmAgent
 from google.adk.workflow import JoinNode, RetryConfig, Workflow
 from google.genai.errors import ServerError
 
+from app.mcp import build_mcp_toolset
 from app.models.investigations import (
     InventoryInvestigation,
     LogisticsInvestigation,
@@ -20,9 +21,7 @@ from app.models.investigations import (
 from app.tools.agent_tools import (
     ALTERNATIVE_SUPPLIER_TOOLS,
     INVENTORY_TOOLS,
-    LOGISTICS_TOOLS,
     PRODUCTION_TOOLS,
-    SUPPLIER_TOOLS,
 )
 
 from .prompts import (
@@ -75,6 +74,12 @@ def build_agent_catalog(
 ) -> AgentCatalog:
     """Create supported ADK 2.x agents without executing a model call."""
     callback_kwargs = callbacks.agent_kwargs() if callbacks else {}
+    supplier_mcp = build_mcp_toolset(
+        ["lookup_supplier", "lookup_supplier_orders"]
+    )
+    logistics_mcp = build_mcp_toolset(
+        ["lookup_order_shipments", "calculate_delay_days"]
+    )
     execution_kwargs = {
         **callback_kwargs,
         "retry_config": RetryConfig(
@@ -102,7 +107,7 @@ def build_agent_catalog(
         description="Investigates current supplier facts and commitments.",
         model=model,
         instruction=SUPPLIER_INSTRUCTION,
-        tools=SUPPLIER_TOOLS,
+        tools=[supplier_mcp],
         output_schema=SupplierInvestigation,
         output_key="investigation_supplier",
         mode="single_turn",
@@ -113,7 +118,7 @@ def build_agent_catalog(
         description="Investigates shipment state and delay exposure.",
         model=model,
         instruction=LOGISTICS_INSTRUCTION,
-        tools=LOGISTICS_TOOLS,
+        tools=[logistics_mcp],
         output_schema=LogisticsInvestigation,
         output_key="investigation_logistics",
         mode="single_turn",

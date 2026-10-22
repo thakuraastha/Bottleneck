@@ -37,6 +37,11 @@ def test_event_and_incident_read_endpoints(tmp_path: Path) -> None:
         assert incident.json()["component_id"] == "MOTOR-X7"
         assert client.get(f"/incidents/{incident_id}/status").json()["status"] == "NEW"
         assert client.get(f"/incidents/{incident_id}/report").json()["execution_plan"] is None
+        audit = client.get(f"/incidents/{incident_id}/audit")
+        assert audit.status_code == 200
+        assert audit.json()["incident"]["incident_id"] == incident_id
+        assert audit.json()["workflow_runs"] == []
+        assert audit.json()["evidence"] == []
 
 
 def test_api_rejects_unknown_supplier(tmp_path: Path) -> None:

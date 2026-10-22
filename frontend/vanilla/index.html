@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f7fb" />
+    <meta
+      name="description"
+      content="Bottleneck agentic supply-chain recovery console"
+    />
+    <title>Bottleneck · Recovery Console</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">B</div>
+          <div>
+            <strong>Bottleneck</strong>
+            <span>Recovery console</span>
+          </div>
+        </div>
+
+        <nav class="side-nav" aria-label="Primary navigation">
+          <button class="side-link is-active" data-tab="overview">
+            <span class="nav-icon">01</span><span>Overview</span>
+          </button>
+          <button class="side-link" data-tab="incidents">
+            <span class="nav-icon">02</span><span>Incidents</span>
+          </button>
+          <button class="side-link" data-tab="evidence">
+            <span class="nav-icon">03</span><span>Evidence ledger</span>
+          </button>
+          <button class="side-link" data-tab="agents">
+            <span class="nav-icon">04</span><span>Agent workflow</span>
+          </button>
+          <button class="side-link" data-tab="strategies">
+            <span class="nav-icon">05</span><span>Recovery plans</span>
+          </button>
+          <button class="side-link" data-tab="suppliers">
+            <span class="nav-icon">06</span><span>Suppliers</span>
+          </button>
+          <button class="side-link" data-tab="evaluation">
+            <span class="nav-icon">07</span><span>Evaluation</span>
+          </button>
+        </nav>
+
+        <div class="system-card">
+          <div class="system-line">
+            <span class="live-dot"></span>
+            <strong id="system-state">Connecting</strong>
+          </div>
+          <p>Human approval remains mandatory. No purchase order is executed automatically.</p>
+          <a href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">Open API docs ↗</a>
+        </div>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar">
+          <button class="icon-button menu-button" id="menu-button" aria-label="Open menu">☰</button>
+          <div class="page-heading">
+            <p class="eyebrow">Agentic supply-chain recovery</p>
+            <h1 id="page-title">Operations overview</h1>
+          </div>
+          <div class="topbar-actions">
+            <div class="api-status" id="api-status"><span></span> API checking</div>
+            <button class="button button-secondary" id="refresh-button">Refresh data</button>
+          </div>
+        </header>
+
+        <div class="mobile-tabs" aria-label="Dashboard tabs">
+          <button class="mobile-tab is-active" data-tab="overview">Overview</button>
+          <button class="mobile-tab" data-tab="incidents">Incidents</button>
+          <button class="mobile-tab" data-tab="evidence">Evidence</button>
+          <button class="mobile-tab" data-tab="agents">Agents</button>
+          <button class="mobile-tab" data-tab="strategies">Plans</button>
+          <button class="mobile-tab" data-tab="suppliers">Suppliers</button>
+          <button class="mobile-tab" data-tab="evaluation">Evaluation</button>
+        </div>
+
+        <main class="content">
+          <div id="notice-stack" class="notice-stack" aria-live="polite"></div>
+
+          <section class="tab-panel is-active" data-panel="overview">
+            <div class="hero-card">
+              <div>
+                <p class="eyebrow">Live operational picture</p>
+                <h2>See the disruption, the reasoning, and the decision path.</h2>
+                <p class="hero-copy">
+                  Every number is connected to persisted scenario data. Every agent stage leaves an audit trail.
+                </p>
+              </div>
+              <div class="hero-meta">
+                <span>Last refreshed</span>
+                <strong id="last-refreshed">—</strong>
+              </div>
+            </div>
+
+            <div class="metric-grid" id="metric-grid"></div>
+
+            <div class="grid two-one">
+              <article class="card">
+                <div class="card-header">
+                  <div><p class="eyebrow">Priority queue</p><h3>Recent incidents</h3></div>
+                  <button class="text-button" data-tab="incidents">View all →</button>
+                </div>
+                <div id="overview-incidents" class="stack-list skeleton-block"></div>
+              </article>
+
+              <article class="card accent-card">
+                <div class="card-header">
+                  <div><p class="eyebrow">Selected incident</p><h3>Readiness</h3></div>
+                </div>
+                <div id="readiness-panel" class="readiness-list"></div>
+              </article>
+            </div>
+
+            <article class="card">
+              <div class="card-header">
+                <div><p class="eyebrow">Functional proof</p><h3>System capability map</h3></div>
+                <span class="soft-badge">Live evidence</span>
+              </div>
+              <div id="capability-grid" class="capability-grid"></div>
+            </article>
+          </section>
+
+          <section class="tab-panel" data-panel="incidents">
+            <div class="section-intro">
+              <div><p class="eyebrow">Detection and response</p><h2>Incident command</h2></div>
+              <button class="button button-primary" id="run-investigation">Run investigation</button>
+            </div>
+            <div class="grid incident-layout">
+              <article class="card incident-list-card">
+                <div class="card-header"><h3>Incident queue</h3><span id="incident-count" class="soft-badge">0 records</span></div>
+                <div id="incident-list" class="incident-list"></div>
+              </article>
+              <article class="card" id="incident-detail"></article>
+            </div>
+            <article class="card progress-card" id="workflow-progress-card">
+              <div class="card-header"><div><p class="eyebrow">Current run</p><h3 id="workflow-phase">Not started</h3></div><span id="workflow-status" class="status neutral">Idle</span></div>
+              <div class="progress-track"><div class="progress-fill" id="workflow-progress"></div></div>
+              <div class="progress-meta"><span id="progress-copy">Choose an incident and start the investigation.</span><strong id="progress-percent">0%</strong></div>
+            </article>
+          </section>
+
+          <section class="tab-panel" data-panel="evidence">
+            <div class="section-intro">
+              <div><p class="eyebrow">Source-grounded facts</p><h2>Evidence & impact</h2></div>
+              <span class="soft-badge" id="evidence-count">0 evidence items</span>
+            </div>
+            <div class="grid risk-grid">
+              <article class="card" id="risk-card"></article>
+              <article class="card" id="simulation-card"></article>
+            </div>
+            <article class="card">
+              <div class="card-header"><div><p class="eyebrow">Audit ledger</p><h3>Verified and calculated facts</h3></div></div>
+              <div class="table-wrap"><table><thead><tr><th>Type</th><th>Field</th><th>Value</th><th>Source</th><th>Observed</th></tr></thead><tbody id="evidence-table"></tbody></table></div>
+            </article>
+          </section>
+
+          <section class="tab-panel" data-panel="agents">
+            <div class="section-intro">
+              <div><p class="eyebrow">Nine-stage orchestration</p><h2>Agent workflow</h2></div>
+              <span id="agent-completion" class="soft-badge">0 / 9 complete</span>
+            </div>
+            <div id="agent-grid" class="agent-grid"></div>
+            <article class="card">
+              <div class="card-header"><div><p class="eyebrow">Execution trace</p><h3>Latest agent events</h3></div></div>
+              <div id="agent-log" class="timeline"></div>
+            </article>
+          </section>
+
+          <section class="tab-panel" data-panel="strategies">
+            <div class="section-intro">
+              <div><p class="eyebrow">Scored recovery options</p><h2>Strategy & approval</h2></div>
+              <span id="decision-state" class="status neutral">No decision</span>
+            </div>
+            <div id="strategy-grid" class="strategy-grid"></div>
+            <div class="grid one-one">
+              <article class="card" id="reflection-card"></article>
+              <article class="card decision-card">
+                <div class="card-header"><div><p class="eyebrow">Human control</p><h3>Decision gate</h3></div></div>
+                <p class="muted">Approval creates a local execution plan only after deterministic constraints and reflection pass.</p>
+                <label class="field"><span>Decision owner</span><input id="decision-owner" value="Faculty Reviewer" maxlength="100" /></label>
+                <label class="field"><span>Reason / note</span><textarea id="decision-reason" rows="3" placeholder="Optional for approval, required for rejection"></textarea></label>
+                <div class="button-row">
+                  <button class="button button-primary" id="approve-button">Approve strategy</button>
+                  <button class="button button-danger" id="reject-button">Reject</button>
+                </div>
+                <div id="decision-history" class="decision-history"></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="tab-panel" data-panel="suppliers">
+            <div class="section-intro"><div><p class="eyebrow">Authorized scenario records</p><h2>Supplier network</h2></div><span id="supplier-count" class="soft-badge">0 suppliers</span></div>
+            <div id="supplier-grid" class="supplier-grid"></div>
+          </section>
+
+          <section class="tab-panel" data-panel="evaluation">
+            <div class="section-intro">
+              <div><p class="eyebrow">Measured system quality</p><h2>Evaluation evidence</h2></div>
+              <button class="button button-primary" id="run-evaluation">Run evaluation suite</button>
+            </div>
+            <div id="evaluation-grid" class="evaluation-grid"></div>
+            <article class="card">
+              <div class="card-header"><div><p class="eyebrow">Faculty requirements</p><h3>Implementation evidence matrix</h3></div><span id="compliance-summary" class="soft-badge">Checking requirements</span></div>
+              <div id="compliance-grid" class="compliance-grid"></div>
+            </article>
+            <article class="card">
+              <div class="card-header"><div><p class="eyebrow">API surface</p><h3>Functions connected to this UI</h3></div></div>
+              <div id="endpoint-list" class="endpoint-list"></div>
+            </article>
+          </section>
+        </main>
+      </div>
+    </div>
+    <div class="sidebar-scrim" id="sidebar-scrim"></div>
+  </body>
+</html>

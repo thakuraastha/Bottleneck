@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -43,4 +44,20 @@ class IncidentReportResponse(BaseModel):
     decisions: list[dict[str, Any]]
     execution_plan: dict[str, Any] | None
     disclaimer: str
+
+
+class CriterionEvidence(BaseModel):
+    criterion: int
+    title: str
+    status: Literal["PASS", "READY", "NEEDS_ACTION"]
+    implementation: str
+    evidence: list[str]
+
+
+class ComplianceResponse(BaseModel):
+    project: str
+    generated_at: datetime
+    passed: int
+    total: int
+    criteria: list[CriterionEvidence]
 

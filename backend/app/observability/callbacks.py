@@ -12,7 +12,8 @@ from google.adk.tools.base_tool import BaseTool
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.database.tables import AgentRunRow
+from app.database.tables import AgentRunRow, SecurityEventRow
+from app.security import GuardrailService, GuardrailViolation
 
 
 class AdkObservabilityCallbacks:
@@ -97,6 +98,29 @@ class AdkObservabilityCallbacks:
             row.token_usage = token_usage or row.token_usage
             session.commit()
 
+    def _record_security(
+        self,
+        context: Context,
+        *,
+        stage: str,
+        violation: GuardrailViolation,
+    ) -> None:
+        incident_id, workflow_run_id = self._scope(context)
+        with self._sessions() as session:
+            session.add(
+                SecurityEventRow(
+                    security_event_id=str(uuid4()),
+                    incident_id=incident_id,
+                    workflow_run_id=workflow_run_id,
+                    stage=stage,
+                    outcome="BLOCKED",
+                    rule=violation.result.rule,
+                    detail=violation.result.detail,
+                    created_at=self._now(),
+                )
+            )
+            session.commit()
+
     def before_agent(self, context: Context) -> None:
         execution_id = str(uuid4())
         if self._insert(context, execution_id=execution_id):
@@ -110,7 +134,12 @@ class AdkObservabilityCallbacks:
         self._finish(execution_id, status="COMPLETED")
 
     def before_model(self, context: Context, request: LlmRequest) -> None:
-        return None
+        try:
+            payload = request.model_dump_json() if hasattr(request, "model_dump_json") else str(request)
+            GuardrailService.require_safe_text(payload)
+        except GuardrailViolation as exc:
+            self._record_security(context, stage="before_model", violation=exc)
+            raise
 
     def after_model(self, context: Context, response: LlmResponse) -> None:
         key = (context.invocation_id, context.agent_name)
@@ -132,6 +161,11 @@ class AdkObservabilityCallbacks:
         self._finish(execution_id, status="FAILED", error=error)
 
     def before_tool(self, tool: BaseTool, args: dict[str, Any], context: Context) -> None:
+        try:
+            GuardrailService.require_valid_tool_payload(args)
+        except GuardrailViolation as exc:
+            self._record_security(context, stage="before_tool", violation=exc)
+            raise
         execution_id = str(uuid4())
         if self._insert(context, execution_id=execution_id, tool_name=tool.name):
             with self._lock:
@@ -144,6 +178,11 @@ class AdkObservabilityCallbacks:
         context: Context,
         tool_response: dict[str, Any],
     ) -> None:
+        try:
+            GuardrailService.require_valid_tool_payload(tool_response)
+        except GuardrailViolation as exc:
+            self._record_security(context, stage="after_tool", violation=exc)
+            raise
         with self._lock:
             execution_id = self._active_tools.pop(self._tool_key(context, tool), None)
         self._finish(execution_id, status="COMPLETED")

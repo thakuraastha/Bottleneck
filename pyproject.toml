@@ -17,11 +17,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ui = ["streamlit>=1.42,<2", "requests>=2.32,<3"]
 agents = [
+  "a2a-sdk==0.3.26",
   "google-adk>=2.10,<3",
+  "google-api-core==2.28.1",
   "crewai>=1.15,<2",
   "litellm>=1.60,<2",
+  "mcp>=1.28,<2",
 ]
 dev = ["pytest>=8.3,<9", "pytest-cov>=6,<7", "httpx>=0.28,<1"]
 

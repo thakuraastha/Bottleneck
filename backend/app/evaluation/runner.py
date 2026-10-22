@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.database.tables import EvaluationRunRow, IncidentRow
+from app.database.tables import AgentRunRow, EvaluationRunRow, IncidentRow, WorkflowRunRow
 from app.engines import RiskEngine
 from app.models.domain import EvidenceItem, EvidenceType
 from app.models.investigations import ProposedAllocation, ProposedStrategy
@@ -172,6 +172,7 @@ class EvaluationRunner:
 
         completed = sum(1 for result in results if result.get("passed"))
         latency_ms = round((perf_counter() - start_clock) * 1000, 2)
+        performance = self._performance_summary()
         metrics = {
             "workflow_completion_rate": _metric(completed, 3, "Passed deterministic evaluation scenarios / 3 attempted scenarios."),
             "correct_tool_invocation_rate": _metric(tool_successes, tool_expected, "Successful required read-only data-tool calls / attempted required calls."),
@@ -181,6 +182,8 @@ class EvaluationRunner:
             "reflection_issue_detection_rate": {**_metric(0, 0, "Requires a live model-backed Reflection Agent run."), "reason": "not measured in deterministic suite"},
             "conditional_routing_correctness": _metric(route_correct, route_expected, "Routing decisions matching independently computed rule expectations / routing checks."),
             "average_workflow_latency_ms": {"measured": True, "value": latency_ms, "method": "Wall-clock duration of this deterministic evaluation run."},
+            "end_to_end_performance": performance,
+            "estimated_model_cost_usd": performance["estimated_model_cost_usd"],
             "agent_failure_rate": {**_metric(0, 0, "Requires live ADK agent invocations."), "reason": "not measured in deterministic suite"},
             "scenario_results": results,
             "suite_kind": "deterministic_offline",
@@ -191,6 +194,81 @@ class EvaluationRunner:
         self.session.commit()
         self.session.refresh(run)
         return run
+
+    def _performance_summary(self) -> dict[str, Any]:
+        workflow = self.session.scalar(
+            select(WorkflowRunRow)
+            .where(WorkflowRunRow.completed_at.is_not(None))
+            .order_by(WorkflowRunRow.completed_at.desc())
+        )
+        if workflow is None or workflow.completed_at is None:
+            return {
+                "measured": False,
+                "reason": "No completed end-to-end workflow is stored yet.",
+                "workflow_runtime_ms": None,
+                "summed_agent_runtime_ms": None,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "estimated_model_cost_usd": None,
+            }
+
+        runs = self.session.scalars(
+            select(AgentRunRow).where(
+                AgentRunRow.workflow_run_id == workflow.workflow_run_id
+            )
+        ).all()
+        input_tokens = 0
+        output_tokens = 0
+        for row in runs:
+            usage = row.token_usage or {}
+            input_tokens += int(
+                usage.get("prompt_token_count")
+                or usage.get("input_tokens")
+                or usage.get("input_token_count")
+                or 0
+            )
+            output_tokens += int(
+                usage.get("candidates_token_count")
+                or usage.get("output_tokens")
+                or usage.get("output_token_count")
+                or 0
+            )
+        started = workflow.started_at
+        completed = workflow.completed_at
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        if completed.tzinfo is None:
+            completed = completed.replace(tzinfo=timezone.utc)
+        workflow_runtime_ms = round(
+            max((completed - started).total_seconds() * 1000, 0.0), 2
+        )
+        estimated_cost = round(
+            input_tokens / 1_000_000
+            * self.settings.model_input_cost_per_million_usd
+            + output_tokens / 1_000_000
+            * self.settings.model_output_cost_per_million_usd,
+            6,
+        )
+        return {
+            "measured": True,
+            "workflow_run_id": workflow.workflow_run_id,
+            "workflow_runtime_ms": workflow_runtime_ms,
+            "summed_agent_runtime_ms": round(
+                sum(row.duration_ms or 0 for row in runs), 2
+            ),
+            "agent_event_count": len(runs),
+            "failed_agent_event_count": sum(
+                1 for row in runs if row.status == "FAILED"
+            ),
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "estimated_model_cost_usd": estimated_cost,
+            "cost_assumptions": {
+                "input_usd_per_million_tokens": self.settings.model_input_cost_per_million_usd,
+                "output_usd_per_million_tokens": self.settings.model_output_cost_per_million_usd,
+                "note": "Configurable budget estimate; provider billing is authoritative.",
+            },
+        }
 
     @staticmethod
     def _proposals() -> list[ProposedStrategy]:

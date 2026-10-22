@@ -170,6 +170,21 @@ class AgentRunRow(Base):
     token_usage: Mapped[dict | None] = mapped_column(JSON)
 
 
+class SecurityEventRow(Base):
+    __tablename__ = "security_events"
+
+    security_event_id: Mapped[str] = mapped_column(String, primary_key=True)
+    incident_id: Mapped[str | None] = mapped_column(String, index=True)
+    workflow_run_id: Mapped[str | None] = mapped_column(String, index=True)
+    stage: Mapped[str] = mapped_column(String, nullable=False)
+    outcome: Mapped[str] = mapped_column(String, nullable=False)
+    rule: Mapped[str] = mapped_column(String, nullable=False)
+    detail: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+
 class EvidenceRow(Base):
     __tablename__ = "evidence"
 

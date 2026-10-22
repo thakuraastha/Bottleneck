@@ -84,17 +84,33 @@ def get_production_requirements(component_id: str) -> list[dict[str, Any]]:
     return _with_tools(lambda tools: [row.model_dump(mode="json") for row in tools.get_production_requirements(component_id)])
 
 
-def run_supplier_research(component_id: str, requested_quantity: int, minimum_quality: float = 80.0) -> dict[str, Any]:
-    """Run the nested CrewAI supplier researcher, analyst, and reviewer workflow."""
-    from app.crews import SupplierResearchCrewAdapter
+async def run_supplier_research(
+    component_id: str,
+    requested_quantity: int,
+    minimum_quality: float = 80.0,
+) -> dict[str, Any]:
+    """Call the remote CrewAI research agent through A2A JSON-RPC."""
+    from app.a2a import SupplierResearchA2AClient
+    from app.a2a.contracts import SupplierResearchA2ARequest
 
-    settings = get_settings()
-    result = SupplierResearchCrewAdapter(settings.gemini_model).run(
-        component_id=component_id,
-        requested_quantity=requested_quantity,
-        minimum_quality=minimum_quality,
+    response = await SupplierResearchA2AClient().research(
+        SupplierResearchA2ARequest(
+            component_id=component_id,
+            requested_quantity=requested_quantity,
+            minimum_quality=minimum_quality,
+        )
     )
-    return result.model_dump(mode="json")
+    return {
+        **response.result.model_dump(mode="json"),
+        "interoperability": {
+            "protocol": response.protocol,
+            "protocol_version": response.protocol_version,
+            "sender_framework": response.sender_framework,
+            "receiver_framework": response.receiver_framework,
+            "agent_name": response.agent_name,
+            "status": response.status,
+        },
+    }
 
 
 SUPPLIER_TOOLS = [get_supplier_record, get_supplier_orders]

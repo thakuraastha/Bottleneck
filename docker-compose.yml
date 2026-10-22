@@ -5,6 +5,7 @@ services:
     environment:
       BOTTLENECK_DATABASE_URL: sqlite:////data/bottleneck.db
       BOTTLENECK_DATA_DIR: /app/data
+      BOTTLENECK_A2A_SUPPLIER_URL: http://127.0.0.1:8000/a2a
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     volumes:
@@ -20,9 +21,7 @@ services:
 
   dashboard:
     build:
-      context: ./frontend/dashboard
-    environment:
-      BOTTLENECK_API_URL: http://api:8000
+      context: ./frontend/vanilla
     depends_on:
       api:
         condition: service_healthy
