@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import date, datetime
+from decimal import Decimal
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -69,7 +72,7 @@ class GuardrailService:
     @classmethod
     def require_valid_tool_payload(cls, value: Any) -> None:
         try:
-            encoded = json.dumps(value, sort_keys=True)
+            encoded = json.dumps(value, sort_keys=True, default=cls._json_default)
         except (TypeError, ValueError) as exc:
             raise GuardrailViolation(
                 GuardrailResult(
@@ -87,3 +90,16 @@ class GuardrailService:
                 )
             )
         cls.require_safe_text(encoded)
+
+    @staticmethod
+    def _json_default(value: Any) -> Any:
+        """Normalize supported typed tool values while rejecting arbitrary objects."""
+        if isinstance(value, (date, datetime)):
+            return value.isoformat()
+        if isinstance(value, Decimal):
+            return str(value)
+        if isinstance(value, Enum):
+            return value.value
+        if isinstance(value, BaseModel):
+            return value.model_dump(mode="json")
+        raise TypeError(f"Unsupported tool payload type: {type(value).__name__}")

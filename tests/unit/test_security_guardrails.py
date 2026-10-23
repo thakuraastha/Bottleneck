@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from app.security import GuardrailService, GuardrailViolation
@@ -29,3 +31,9 @@ def test_guardrail_accepts_normal_supply_chain_incident() -> None:
 def test_tool_output_must_be_json_serializable() -> None:
     with pytest.raises(GuardrailViolation):
         GuardrailService.require_valid_tool_payload({"bad": object()})
+
+
+def test_tool_output_accepts_typed_dates_from_database_tools() -> None:
+    GuardrailService.require_valid_tool_payload(
+        {"order_id": "PO-X7-1001", "expected_delivery": date(2026, 1, 20)}
+    )
