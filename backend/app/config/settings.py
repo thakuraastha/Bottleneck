@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     database_url: str = f"sqlite:///{PROJECT_ROOT / 'bottleneck.db'}"
     data_dir: Path = PROJECT_ROOT / "data"
+    frontend_dir: Path = PROJECT_ROOT / "frontend" / "vanilla"
     simulation_date: date = date(2026, 1, 15)
     planning_horizon_days: int = Field(default=30, ge=1, le=365)
     medium_risk_alternative_research: bool = True

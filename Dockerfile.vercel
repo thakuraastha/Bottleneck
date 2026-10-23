@@ -4,7 +4,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     BOTTLENECK_DATABASE_URL=sqlite:////tmp/bottleneck.db \
-    BOTTLENECK_DATA_DIR=/app/data
+    BOTTLENECK_DATA_DIR=/app/data \
+    BOTTLENECK_FRONTEND_DIR=/app/frontend/vanilla
 
 WORKDIR /app
 

@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 
 from app.a2a import build_a2a_app
 from app.config import get_settings
-from app.config.settings import PROJECT_ROOT
 from app.database import build_engine, create_schema, session_factory
 from app.database.tables import (
     AgentRunRow,
@@ -56,7 +55,8 @@ from .schemas import ComplianceResponse, CriterionEvidence, DecisionRequest, Dec
 
 
 def create_app(database_url: str | None = None) -> FastAPI:
-    resolved_url = database_url or get_settings().database_url
+    settings = get_settings()
+    resolved_url = database_url or settings.database_url
     engine = build_engine(resolved_url)
     SessionFactory = session_factory(engine)
 
@@ -411,7 +411,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
 
     application.mount(
         "/",
-        StaticFiles(directory=PROJECT_ROOT / "frontend" / "vanilla", html=True),
+        StaticFiles(directory=settings.frontend_dir, html=True),
         name="dashboard",
     )
     return application
