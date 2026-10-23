@@ -69,7 +69,9 @@ Open `http://127.0.0.1:3000` after both containers become healthy.
 
 ## Cloud deployment
 
-The repository includes a Vercel container deployment (`Dockerfile.vercel` + `vercel.json`) and a Render Blueprint (`render.yaml`). The FastAPI container also serves the dashboard at `/`, so a cloud deployment has one public URL. Configure `GEMINI_API_KEY` in the platform's encrypted environment settings; never commit it.
+The repository includes a Vercel container deployment (`Dockerfile.vercel` + `vercel.json`) and a Render Blueprint (`render.yaml`). The live dashboard is at `https://bottleneck.vercel.app`. Configure `GEMINI_API_KEY` in the platform's encrypted environment settings; never commit it.
+
+The Vercel demonstration uses ephemeral container-local SQLite. Health, dashboard, A2A, and single-request workflow execution are deployed, but durable multi-request cloud history requires setting `BOTTLENECK_DATABASE_URL` to a managed SQL database. Use the local launcher for the faculty walkthrough because its SQLite audit history persists reliably.
 
 ## Verification
 

@@ -32,6 +32,8 @@ cd /Users/aasthathakur/classwork/Bottleneck
 
 Wait until Terminal prints both URLs, then open [http://127.0.0.1:3000](http://127.0.0.1:3000). Stop everything with `Ctrl+C` after the presentation.
 
+The public cloud build is available at [https://bottleneck.vercel.app](https://bottleneck.vercel.app). Use the local URL for the assessed walkthrough because it preserves the complete SQLite audit across browser requests; the Vercel container needs a managed SQL database for durable cloud history.
+
 ## Recommended five-minute walkthrough
 
 1. **Overview tab:** explain the four KPIs and the functional-proof cards showing persisted records for each major subsystem.
