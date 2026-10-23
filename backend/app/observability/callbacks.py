@@ -218,6 +218,18 @@ class AdkObservabilityCallbacks:
             execution_id = self._active_tools.pop(self._tool_key(context, tool), None)
         self._finish(execution_id, status="FAILED", error=error)
 
+    def fail_open_runs(self, error: Exception) -> None:
+        """Close callback records when ADK aborts outside its error callbacks."""
+        with self._lock:
+            execution_ids = [
+                *self._active_agents.values(),
+                *self._active_tools.values(),
+            ]
+            self._active_agents.clear()
+            self._active_tools.clear()
+        for execution_id in execution_ids:
+            self._finish(execution_id, status="FAILED", error=error)
+
     def agent_kwargs(self) -> dict[str, Any]:
         """Return callback wiring accepted by maintained ADK LlmAgent releases."""
         return {

@@ -381,6 +381,7 @@ class IncidentWorkflowService:
                 )
                 return workflow.catalog, model
             except Exception as exc:
+                callbacks.fail_open_runs(exc)
                 last_error = exc
                 if not self._is_transient(exc):
                     break
@@ -439,6 +440,7 @@ class IncidentWorkflowService:
                 )
                 return catalog, model
             except Exception as exc:
+                callbacks.fail_open_runs(exc)
                 last_error = exc
                 if not self._is_transient(exc):
                     break

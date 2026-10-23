@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
 class SourceReference(BaseModel):
@@ -55,6 +55,11 @@ class LogisticsInvestigation(InvestigationOutput):
     delay_days: int | None = None
     remaining_inbound_quantity: int = 0
 
+    @field_serializer("original_eta", "revised_eta")
+    def serialize_dates(self, value: date | None) -> str | None:
+        """Keep ADK's internal structured-response payload JSON serializable."""
+        return value.isoformat() if value else None
+
 
 class InventoryInvestigation(InvestigationOutput):
     component_id: str
@@ -65,6 +70,11 @@ class InventoryInvestigation(InvestigationOutput):
     first_safety_stock_breach_date: date | None = None
     first_shortage_date: date | None = None
     total_shortage_quantity: int = 0
+
+    @field_serializer("first_safety_stock_breach_date", "first_shortage_date")
+    def serialize_dates(self, value: date | None) -> str | None:
+        """Keep ADK's internal structured-response payload JSON serializable."""
+        return value.isoformat() if value else None
 
 
 class ProductionInvestigation(InvestigationOutput):

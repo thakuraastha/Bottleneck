@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 from google.adk.models.llm_request import LlmRequest
@@ -11,6 +11,7 @@ from sqlalchemy import select
 from app.database.base import build_engine, create_schema, session_factory
 from app.database.tables import AgentRunRow, IncidentRow, WorkflowRunRow
 from app.observability import AdkObservabilityCallbacks
+from app.models.investigations import InventoryInvestigation, LogisticsInvestigation
 
 
 def _context(*, function_call_id: str | None = None) -> SimpleNamespace:
@@ -126,3 +127,37 @@ def test_before_model_handles_pydantic_response_schema_without_serializing_class
     )
 
     callbacks.before_model(_context(), request)
+
+
+def test_structured_investigation_dates_dump_as_json_safe_strings() -> None:
+    logistics = LogisticsInvestigation(
+        summary="Shipment checked",
+        order_id="PO-X7-1001",
+        original_eta=date(2026, 1, 20),
+        revised_eta=date(2026, 1, 30),
+    )
+    inventory = InventoryInvestigation(
+        summary="Inventory checked",
+        component_id="MOTOR-X7",
+        on_hand_quantity=650,
+        reserved_quantity=50,
+        available_quantity=600,
+        safety_stock=200,
+        first_shortage_date=date(2026, 1, 21),
+    )
+
+    assert logistics.model_dump()["revised_eta"] == "2026-01-30"
+    assert inventory.model_dump()["first_shortage_date"] == "2026-01-21"
+
+
+def test_fail_open_runs_marks_interrupted_agent_failed(tmp_path) -> None:
+    callbacks, sessions = _callbacks(tmp_path)
+    callbacks.before_agent(_context())
+
+    callbacks.fail_open_runs(RuntimeError("workflow interrupted"))
+
+    with sessions() as session:
+        row = session.scalar(select(AgentRunRow))
+        assert row is not None
+        assert row.status == "FAILED"
+        assert row.error == "workflow interrupted"
