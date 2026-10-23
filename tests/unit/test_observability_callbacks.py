@@ -129,6 +129,18 @@ def test_before_model_handles_pydantic_response_schema_without_serializing_class
     callbacks.before_model(_context(), request)
 
 
+def test_before_model_validates_long_history_per_fragment(tmp_path) -> None:
+    callbacks, _ = _callbacks(tmp_path)
+    request = LlmRequest(
+        contents=[
+            types.Content(role="user", parts=[types.Part(text="a" * 30_000)]),
+            types.Content(role="model", parts=[types.Part(text="b" * 30_000)]),
+        ]
+    )
+
+    callbacks.before_model(_context(), request)
+
+
 def test_structured_investigation_dates_dump_as_json_safe_strings() -> None:
     logistics = LogisticsInvestigation(
         summary="Shipment checked",

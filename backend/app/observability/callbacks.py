@@ -134,8 +134,8 @@ class AdkObservabilityCallbacks:
         self._finish(execution_id, status="COMPLETED")
 
     @staticmethod
-    def _model_request_text(request: LlmRequest) -> str:
-        """Extract prompt text without serializing ADK schema classes or tool objects."""
+    def _model_request_fragments(request: LlmRequest) -> list[str]:
+        """Extract prompt fragments without serializing schema classes or tools."""
         fragments: list[str] = []
         for content in request.contents or []:
             for part in getattr(content, "parts", None) or []:
@@ -152,11 +152,12 @@ class AdkObservabilityCallbacks:
                 value = getattr(part, "text", None)
                 if isinstance(value, str):
                     fragments.append(value)
-        return "\n".join(fragments)
+        return fragments
 
     def before_model(self, context: Context, request: LlmRequest) -> None:
         try:
-            GuardrailService.require_safe_text(self._model_request_text(request))
+            for fragment in self._model_request_fragments(request):
+                GuardrailService.require_safe_text(fragment)
         except GuardrailViolation as exc:
             self._record_security(context, stage="before_model", violation=exc)
             raise
