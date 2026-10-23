@@ -115,11 +115,16 @@ async function optional(path) {
 }
 
 function notice(message, type = "info", timeout = 6500) {
+  if (type === "error") clearNotices("error");
   const item = document.createElement("div");
   item.className = `notice ${type}`;
   item.innerHTML = `<strong>${type === "error" ? "Needs attention" : type === "success" ? "Complete" : "Update"}</strong><span>${escapeHTML(message)}</span>`;
   $("#notice-stack").prepend(item);
   if (timeout) window.setTimeout(() => item.remove(), timeout);
+}
+
+function clearNotices(type) {
+  $$(`#notice-stack .notice${type ? `.${type}` : ""}`).forEach((item) => item.remove());
 }
 
 function setApiOnline(online) {
@@ -168,6 +173,7 @@ async function loadAll({ quiet = false } = {}) {
     state.selectedIncidentId = preferred?.incident_id || null;
     if (state.selectedIncidentId) localStorage.setItem("bottleneck-selected-incident", state.selectedIncidentId);
     setApiOnline(true);
+    clearNotices("error");
     await loadSelectedIncident();
     renderAll();
     $("#last-refreshed").textContent = dateTime(new Date().toISOString());
