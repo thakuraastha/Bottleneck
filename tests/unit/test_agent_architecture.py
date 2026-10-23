@@ -15,6 +15,16 @@ def test_exactly_nine_top_level_agents_are_defined() -> None:
     assert all(isinstance(agent, LlmAgent) for agent in catalog.top_level_agents)
 
 
+def test_standalone_downstream_agents_use_root_compatible_mode() -> None:
+    catalog = build_agent_catalog("gemini-2.5-flash")
+    assert {
+        catalog.risk_analyst.mode,
+        catalog.alternative_supplier.mode,
+        catalog.recovery_planner.mode,
+        catalog.reflection_quality.mode,
+    } == {"chat"}
+
+
 def test_four_specialists_use_real_adk_fan_out_join_workflow_and_namespaced_outputs() -> None:
     catalog = build_agent_catalog("gemini-2.5-flash")
     workflow = catalog.parallel_investigation

@@ -165,7 +165,7 @@ def build_agent_catalog(
         instruction=RISK_ANALYST_INSTRUCTION,
         output_schema=RiskInterpretation,
         output_key="risk_interpretation",
-        mode="single_turn",
+        mode="chat",
         **execution_kwargs,
     )
     alternative_supplier = LlmAgent(
@@ -175,7 +175,7 @@ def build_agent_catalog(
         instruction=ALTERNATIVE_SUPPLIER_INSTRUCTION,
         tools=ALTERNATIVE_SUPPLIER_TOOLS,
         output_key="alternative_supplier_research",
-        mode="single_turn",
+        mode="chat",
         **execution_kwargs,
     )
     recovery_planner = LlmAgent(
@@ -185,7 +185,7 @@ def build_agent_catalog(
         instruction=RECOVERY_PLANNER_INSTRUCTION,
         output_schema=RecoveryPlanningOutput,
         output_key="recovery_proposals",
-        mode="single_turn",
+        mode="chat",
         **execution_kwargs,
     )
     reflection = LlmAgent(
@@ -195,7 +195,7 @@ def build_agent_catalog(
         instruction=REFLECTION_INSTRUCTION,
         output_schema=ReflectionReview,
         output_key="reflection_review",
-        mode="single_turn",
+        mode="chat",
         **execution_kwargs,
     )
     return AgentCatalog(
