@@ -38,9 +38,9 @@ After the one-time setup, start both services with:
 ./scripts/run_demo.sh
 ```
 
-Open `http://127.0.0.1:3000`. The faculty presentation sequence and troubleshooting checklist are in [docs/FACULTY_DEMO.md](docs/FACULTY_DEMO.md).
+Open `http://127.0.0.1:3000`
 
-The live requirements matrix is in the dashboard's **Evaluation** tab and at `GET /system/compliance`. Its source-level evidence is documented in [docs/requirements_compliance.md](docs/requirements_compliance.md).
+
 
 ### Start services separately
 
@@ -81,4 +81,3 @@ node --check frontend/vanilla/app.js
 docker compose config --quiet
 ```
 
-See [requirements compliance](docs/requirements_compliance.md), [architecture](docs/architecture.md), [agent design](docs/agent_design.md), [observability](docs/observability.md), [evaluation](docs/evaluation.md), and the [implementation plan](docs/implementation_plan.md).
