@@ -133,10 +133,30 @@ class AdkObservabilityCallbacks:
             execution_id = self._active_agents.pop(key, None)
         self._finish(execution_id, status="COMPLETED")
 
+    @staticmethod
+    def _model_request_text(request: LlmRequest) -> str:
+        """Extract prompt text without serializing ADK schema classes or tool objects."""
+        fragments: list[str] = []
+        for content in request.contents or []:
+            for part in getattr(content, "parts", None) or []:
+                value = getattr(part, "text", None)
+                if isinstance(value, str):
+                    fragments.append(value)
+
+        config = getattr(request, "config", None)
+        system_instruction = getattr(config, "system_instruction", None)
+        if isinstance(system_instruction, str):
+            fragments.append(system_instruction)
+        elif system_instruction is not None:
+            for part in getattr(system_instruction, "parts", None) or []:
+                value = getattr(part, "text", None)
+                if isinstance(value, str):
+                    fragments.append(value)
+        return "\n".join(fragments)
+
     def before_model(self, context: Context, request: LlmRequest) -> None:
         try:
-            payload = request.model_dump_json() if hasattr(request, "model_dump_json") else str(request)
-            GuardrailService.require_safe_text(payload)
+            GuardrailService.require_safe_text(self._model_request_text(request))
         except GuardrailViolation as exc:
             self._record_security(context, stage="before_model", violation=exc)
             raise

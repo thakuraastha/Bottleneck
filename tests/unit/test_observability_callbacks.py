@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+from google.adk.models.llm_request import LlmRequest
+from google.genai import types
+from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.database.base import build_engine, create_schema, session_factory
@@ -110,3 +113,16 @@ def test_retried_agent_attempts_receive_persisted_ordinals(tmp_path) -> None:
         rows = session.scalars(select(AgentRunRow).order_by(AgentRunRow.start_time)).all()
         assert [row.retry_count for row in rows] == [0, 1]
         assert [row.status for row in rows] == ["FAILED", "COMPLETED"]
+
+
+def test_before_model_handles_pydantic_response_schema_without_serializing_class(tmp_path) -> None:
+    class StructuredAnswer(BaseModel):
+        summary: str
+
+    callbacks, _ = _callbacks(tmp_path)
+    request = LlmRequest(
+        contents=[types.Content(role="user", parts=[types.Part(text="Assess supplier delay")])],
+        config=types.GenerateContentConfig(response_schema=StructuredAnswer),
+    )
+
+    callbacks.before_model(_context(), request)
