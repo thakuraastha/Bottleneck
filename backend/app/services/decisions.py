@@ -52,6 +52,11 @@ class HumanDecisionService:
         if strategy is None or strategy.incident_id != decision.incident_id:
             raise DecisionConflictError("strategy does not belong to incident")
 
+        plan = self.session.scalar(
+            select(ExecutionPlanRow).where(
+                ExecutionPlanRow.incident_id == decision.incident_id
+            )
+        )
         execution_plan_id = None
         if decision.decision == DecisionType.APPROVE:
             evaluation = self.session.scalar(select(StrategyEvaluationRow).where(
@@ -65,21 +70,29 @@ class HumanDecisionService:
             if reflection is None or not reflection.passed:
                 raise DecisionConflictError("reflection must pass before approval")
             incident.status = IncidentStatus.APPROVED.value
-            plan = ExecutionPlanRow(
-                execution_plan_id=str(uuid4()),
-                incident_id=decision.incident_id,
-                strategy_id=decision.strategy_id,
-                plan_data={
-                    "strategy": strategy.strategy_data,
-                    "authorization": "HUMAN_APPROVED_PLAN_ONLY",
-                    "real_orders_executed": False,
-                },
-                created_at=utc_now(),
-            )
-            self.session.add(plan)
+            plan_data = {
+                "strategy": strategy.strategy_data,
+                "authorization": "HUMAN_APPROVED_PLAN_ONLY",
+                "real_orders_executed": False,
+            }
+            if plan is None:
+                plan = ExecutionPlanRow(
+                    execution_plan_id=str(uuid4()),
+                    incident_id=decision.incident_id,
+                    strategy_id=decision.strategy_id,
+                    plan_data=plan_data,
+                    created_at=utc_now(),
+                )
+                self.session.add(plan)
+            else:
+                plan.strategy_id = decision.strategy_id
+                plan.plan_data = plan_data
+                plan.created_at = utc_now()
             execution_plan_id = plan.execution_plan_id
         else:
             incident.status = IncidentStatus.REJECTED.value
+            if plan is not None:
+                self.session.delete(plan)
 
         row = HumanDecisionRow(**decision.model_dump(mode="python"))
         self.session.add(row)
