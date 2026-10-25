@@ -371,10 +371,10 @@ function renderStrategies() {
   const incident = selectedIncident();
   $("#decision-state").outerHTML = statusBadge(incident?.status || "No decision").replace("<span", `<span id="decision-state"`);
   const decisions = state.audit?.human_decisions || [];
-  $("#decision-history").innerHTML = decisions.map((item) => `<div class="decision-entry"><strong>${escapeHTML(item.decision)}</strong> by ${escapeHTML(item.decided_by)} · ${dateTime(item.decided_at)}${item.reason ? `<br><span class="muted">${escapeHTML(item.reason)}</span>` : ""}</div>`).join("") || `<div class="decision-entry muted">No human decision has been recorded.</div>`;
-  const canDecide = Boolean(recommendedId && ["WAITING_FOR_APPROVAL", "REJECTED"].includes(incident?.status));
+  const canDecide = Boolean(recommendedId && ["WAITING_FOR_APPROVAL", "REJECTED", "APPROVED"].includes(incident?.status));
   $("#approve-button").disabled = !canDecide;
   $("#reject-button").disabled = !canDecide;
+  $("#approve-button").textContent = incident?.status === "APPROVED" ? "Re-approve strategy" : "Approve strategy";
 }
 
 function renderSuppliers() {

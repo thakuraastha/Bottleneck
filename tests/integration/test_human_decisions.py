@@ -95,9 +95,7 @@ def test_reapproval_replaces_stale_plan_and_rejection_revokes_it(tmp_path) -> No
         )
         first_plan_id = first.execution_plan_id
 
-        incident = session.get(IncidentRow, "INC-DECISION")
-        incident.status = IncidentStatus.WAITING_FOR_APPROVAL.value
-        session.commit()
+        # Test direct re-approval without resetting status to WAITING_FOR_APPROVAL
         second = service.record(
             HumanDecision(
                 incident_id="INC-DECISION",
@@ -117,8 +115,20 @@ def test_reapproval_replaces_stale_plan_and_rejection_revokes_it(tmp_path) -> No
         assert plan.strategy_id == "STRATEGY-2"
         assert plan.plan_data["strategy"]["strategy_id"] == "STRATEGY-2"
 
-        incident.status = IncidentStatus.WAITING_FOR_APPROVAL.value
-        session.commit()
+        # Test re-approval with the SAME reviewer
+        same_reviewer = service.record(
+            HumanDecision(
+                incident_id="INC-DECISION",
+                strategy_id="STRATEGY-2",
+                decision=DecisionType.APPROVE,
+                decided_by="Reviewer Two",
+                reason="Updated approval note",
+            )
+        )
+        assert same_reviewer.duplicate is True
+        assert same_reviewer.execution_plan_id == first_plan_id
+
+        # Test rejecting after approval
         service.record(
             HumanDecision(
                 incident_id="INC-DECISION",
@@ -133,5 +143,21 @@ def test_reapproval_replaces_stale_plan_and_rejection_revokes_it(tmp_path) -> No
                 ExecutionPlanRow.incident_id == "INC-DECISION"
             )
         ) is None
+
+        # Test re-approving after rejection
+        third = service.record(
+            HumanDecision(
+                incident_id="INC-DECISION",
+                strategy_id="STRATEGY-1",
+                decision=DecisionType.APPROVE,
+                decided_by="Reviewer Four",
+            )
+        )
+        assert third.incident_status == IncidentStatus.APPROVED.value
+        assert session.scalar(
+            select(ExecutionPlanRow).where(
+                ExecutionPlanRow.incident_id == "INC-DECISION"
+            )
+        ) is not None
 
     engine.dispose()

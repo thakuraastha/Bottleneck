@@ -34,23 +34,24 @@ class HumanDecisionService:
         self.session = session
 
     def record(self, decision: HumanDecision) -> DecisionResult:
+        incident = self._incident(decision.incident_id)
+        if incident.status not in {
+            IncidentStatus.WAITING_FOR_APPROVAL.value,
+            IncidentStatus.REJECTED.value,
+            IncidentStatus.APPROVED.value,
+        }:
+            raise DecisionConflictError(f"incident status {incident.status} does not accept a human decision")
+
+        strategy = self.session.get(RecoveryStrategyRow, decision.strategy_id)
+        if strategy is None or strategy.incident_id != decision.incident_id:
+            raise DecisionConflictError("strategy does not belong to incident")
+
         existing = self.session.scalar(select(HumanDecisionRow).where(
             HumanDecisionRow.incident_id == decision.incident_id,
             HumanDecisionRow.strategy_id == decision.strategy_id,
             HumanDecisionRow.decision == decision.decision.value,
             HumanDecisionRow.decided_by == decision.decided_by,
         ))
-        if existing:
-            plan = self.session.scalar(select(ExecutionPlanRow).where(ExecutionPlanRow.incident_id == decision.incident_id))
-            incident = self._incident(decision.incident_id)
-            return DecisionResult(existing.decision_id, incident.status, plan.execution_plan_id if plan else None, True)
-
-        incident = self._incident(decision.incident_id)
-        if incident.status not in {IncidentStatus.WAITING_FOR_APPROVAL.value, IncidentStatus.REJECTED.value}:
-            raise DecisionConflictError(f"incident status {incident.status} does not accept a human decision")
-        strategy = self.session.get(RecoveryStrategyRow, decision.strategy_id)
-        if strategy is None or strategy.incident_id != decision.incident_id:
-            raise DecisionConflictError("strategy does not belong to incident")
 
         plan = self.session.scalar(
             select(ExecutionPlanRow).where(
@@ -93,6 +94,13 @@ class HumanDecisionService:
             incident.status = IncidentStatus.REJECTED.value
             if plan is not None:
                 self.session.delete(plan)
+
+        if existing is not None:
+            existing.reason = decision.reason
+            existing.decided_at = utc_now()
+            incident.updated_at = utc_now()
+            self.session.commit()
+            return DecisionResult(existing.decision_id, incident.status, execution_plan_id, True)
 
         row = HumanDecisionRow(**decision.model_dump(mode="python"))
         self.session.add(row)
