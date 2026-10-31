@@ -22,8 +22,14 @@ class CrewAISupplierAgentExecutor(AgentExecutor):
     """Serve the CrewAI supplier crew through the standard A2A protocol."""
 
     def __init__(self, adapter: SupplierResearchCrewAdapter | None = None) -> None:
+        settings = get_settings()
         self._adapter = adapter or SupplierResearchCrewAdapter(
-            get_settings().gemini_model
+            settings.crewai_model,
+            fallback_models=[
+                item.strip()
+                for item in settings.crewai_fallback_models.split(",")
+                if item.strip()
+            ],
         )
 
     async def execute(

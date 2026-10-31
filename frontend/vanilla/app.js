@@ -5,22 +5,26 @@ const API_BASE = window.location.port === "3000" || window.location.protocol ===
   : window.location.origin;
 
 const AGENTS = [
-  ["orchestrator_triage_agent", "Orchestrator & triage", "Validates identifiers and scopes the disruption."],
-  ["supplier_intelligence_agent", "Supplier intelligence", "Retrieves supplier commitments, capacity, quality, and reliability."],
-  ["logistics_intelligence_agent", "Logistics intelligence", "Checks shipment state, revised ETA, and deterministic delay."],
-  ["demand_inventory_agent", "Demand & inventory", "Projects stock, demand, safety-stock breach, and shortage."],
-  ["production_impact_agent", "Production impact", "Connects component shortages to downtime and financial exposure."],
-  ["risk_analyst_agent", "Risk analyst", "Explains the deterministic risk score without modifying it."],
-  ["alternative_supplier_agent", "Alternative supplier", "Runs supplier research when routing rules require it."],
-  ["recovery_planning_agent", "Recovery planner", "Builds evidence-grounded allocation proposals."],
-  ["reflection_quality_agent", "Reflection & quality", "Checks plan quality and drives bounded revisions."],
+  { name: "orchestrator_triage_agent", title: "Orchestrator & triage", framework: "Google ADK", outputKey: "triage_output", copy: "Validates identifiers and scopes the disruption." },
+  { name: "supplier_intelligence_agent", title: "Supplier intelligence", framework: "Google ADK", outputKey: "investigation_supplier", copy: "Retrieves supplier commitments, capacity, quality, and reliability." },
+  { name: "logistics_intelligence_agent", title: "Logistics intelligence", framework: "Google ADK", outputKey: "investigation_logistics", copy: "Checks shipment state, revised ETA, and deterministic delay." },
+  { name: "demand_inventory_agent", title: "Demand & inventory", framework: "Google ADK", outputKey: "investigation_inventory", copy: "Projects stock, demand, safety-stock breach, and shortage." },
+  { name: "production_impact_agent", title: "Production impact", framework: "Google ADK", outputKey: "investigation_production", copy: "Connects component shortages to downtime and financial exposure." },
+  { name: "langgraph_state_supervisor", title: "Shared-state supervisor", framework: "LangGraph", outputKey: "langgraph_supervision", copy: "Validates ADK state handoffs before deterministic risk processing." },
+  { name: "risk_analyst_agent", title: "Risk analyst", framework: "Google ADK", outputKey: "risk_interpretation", copy: "Explains the deterministic risk score without modifying it." },
+  { name: "alternative_supplier_agent", title: "Alternative supplier bridge", framework: "Google ADK + A2A", outputKey: "alternative_supplier_research", copy: "Routes authorized supplier research to the CrewAI service." },
+  { name: "crewai_supplier_researcher", title: "Supplier researcher", framework: "CrewAI", outputKey: "crewai_supplier_researcher", copy: "Retrieves authorized synthetic supplier records." },
+  { name: "crewai_supplier_analyst", title: "Supplier analyst", framework: "CrewAI", outputKey: "crewai_supplier_analyst", copy: "Compares capacity, cost, quality, reliability, and lead time." },
+  { name: "crewai_supplier_reviewer", title: "Supplier reviewer", framework: "CrewAI", outputKey: "crewai_supplier_reviewer", copy: "Applies eligibility gates and validates the structured result." },
+  { name: "recovery_planning_agent", title: "Recovery planner", framework: "Google ADK", outputKey: "recovery_proposals", copy: "Builds evidence-grounded allocation proposals." },
+  { name: "reflection_quality_agent", title: "Reflection & quality", framework: "Google ADK", outputKey: "reflection_review", copy: "Checks plan quality and drives bounded revisions." },
 ];
 
 const ENDPOINTS = [
   ["GET", "/health", "API health and launcher readiness"],
   ["GET", "/dashboard/summary", "Operational KPIs and modeled exposure"],
   ["GET", "/incidents", "Persisted incident queue"],
-  ["POST", "/incidents/{id}/run", "Background nine-stage investigation"],
+  ["POST", "/incidents/{id}/run", "Background ADK + CrewAI + LangGraph investigation"],
   ["GET", "/incidents/{id}/audit", "Complete evidence and reasoning trail"],
   ["GET", "/incidents/{id}/simulation", "Deterministic daily supply projection"],
   ["POST", "/incidents/{id}/approve", "Human approval and local execution plan"],
@@ -266,7 +270,7 @@ function renderCapabilities() {
     ["Deterministic simulation", state.simulation ? 1 : 0, "Daily stock and shortage projection"],
     ["Evidence aggregation", audit.evidence?.length || 0, "Source-linked verified facts"],
     ["Risk scoring", audit.risk_assessments?.length || 0, "Delivery, inventory, finance, production"],
-    ["Nine agent stages", uniqueTopLevelAgents().size, "Triage through quality reflection"],
+    ["Visible agent stages", uniqueTopLevelAgents().size, "ADK, CrewAI, and LangGraph"],
     ["Supplier research", audit.supplier_candidates?.length || 0, "Eligibility and rejection reasons"],
     ["Strategy validation", audit.strategy_evaluations?.length || 0, "Constraints and weighted scoring"],
     ["Human approval", audit.human_decisions?.length || 0, "Audited approve/reject decision"],
@@ -333,19 +337,45 @@ function renderEvidence() {
 
 function uniqueTopLevelAgents() {
   const latest = new Map();
-  (state.audit?.agent_runs || []).filter((run) => !run.tool_name).forEach((run) => latest.set(run.agent_name, run));
+  const workflowRunId = latestWorkflow()?.workflow_run_id;
+  (state.audit?.agent_runs || [])
+    .filter((run) => !run.tool_name && (!workflowRunId || run.workflow_run_id === workflowRunId))
+    .forEach((run) => latest.set(run.agent_name, run));
   return latest;
+}
+
+function agentOutputMarkup(output) {
+  if (output === null || output === undefined) {
+    return `<div class="agent-output-empty">Output will appear here while the workflow runs.</div>`;
+  }
+  const text = typeof output === "string" ? output : JSON.stringify(output, null, 2);
+  const summary = typeof output === "object"
+    ? output.summary || output.narrative || output.rationale || output.output || output.reason
+    : output;
+  return `<div class="agent-output-preview">${escapeHTML(String(summary || "Structured output ready").slice(0, 220))}</div>
+    <details class="agent-output"><summary>View complete output</summary><pre>${escapeHTML(text)}</pre></details>`;
 }
 
 function renderAgents() {
   const latest = uniqueTopLevelAgents();
-  const complete = AGENTS.filter(([name]) => latest.get(name)?.status === "COMPLETED").length;
+  const outputs = latestWorkflow()?.state?.agent_outputs || {};
+  const complete = AGENTS.filter((agent) => latest.get(agent.name)?.status === "COMPLETED").length;
   $("#agent-completion").textContent = `${complete} / ${AGENTS.length} complete`;
-  $("#agent-grid").innerHTML = AGENTS.map(([name, title, copy], index) => {
-    const run = latest.get(name);
-    return `<article class="agent-card"><span class="agent-number">STAGE ${String(index + 1).padStart(2, "0")}</span>${statusBadge(run?.status || "PENDING")}<h3>${escapeHTML(title)}</h3><p>${escapeHTML(copy)}</p><div class="agent-meta"><span>${escapeHTML(run?.model_identifier || "Awaiting run")}</span><span>${run?.duration_ms == null ? "—" : `${number(run.duration_ms)} ms`}</span></div></article>`;
+  $("#agent-grid").innerHTML = AGENTS.map((agent, index) => {
+    const run = latest.get(agent.name);
+    const output = outputs[agent.outputKey];
+    const displayStatus = run?.status || (output?.skipped ? "SKIPPED" : output ? "COMPLETED" : "PENDING");
+    return `<article class="agent-card" data-framework="${className(agent.framework)}">
+      <div class="agent-card-top"><span class="agent-number">STAGE ${String(index + 1).padStart(2, "0")}</span><span class="framework-badge">${escapeHTML(agent.framework)}</span></div>
+      ${statusBadge(displayStatus)}<h3>${escapeHTML(agent.title)}</h3><p>${escapeHTML(agent.copy)}</p>
+      ${agentOutputMarkup(output)}
+      <div class="agent-meta"><span>${escapeHTML(run?.model_identifier || agent.framework)}</span><span>${run?.duration_ms == null ? "—" : `${number(run.duration_ms)} ms`}</span></div>
+    </article>`;
   }).join("");
-  const runs = (state.audit?.agent_runs || []).slice().reverse().slice(0, 40);
+  const workflowRunId = latestWorkflow()?.workflow_run_id;
+  const runs = (state.audit?.agent_runs || [])
+    .filter((run) => !workflowRunId || run.workflow_run_id === workflowRunId)
+    .slice().reverse().slice(0, 60);
   $("#agent-log").innerHTML = runs.map((run) => `<div class="timeline-item"><strong>${escapeHTML(humanize(run.agent_name))}</strong><span>${run.tool_name ? `Tool · ${escapeHTML(run.tool_name)}` : escapeHTML(run.model_identifier || "Agent stage")}</span><small>${statusBadge(run.status)} · ${dateTime(run.start_time)}</small></div>`).join("") || `<div class="empty-state">No agent events yet.</div>`;
 }
 

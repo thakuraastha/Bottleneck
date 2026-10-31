@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 from uuid import uuid4
@@ -50,7 +51,11 @@ from app.models.investigations import (
     TriageOutput,
 )
 from app.observability import AdkObservabilityCallbacks
-from app.orchestration import ConditionalRouter, build_investigation_workflow
+from app.orchestration import (
+    ConditionalRouter,
+    build_investigation_workflow,
+    run_langgraph_supervisor,
+)
 from app.services.evidence import EvidenceAggregator
 from app.services.strategy_pipeline import StrategyPipeline, StrategyPipelineResult
 from app.simulation import SimulationResult, SupplySimulator
@@ -81,6 +86,18 @@ class IncidentWorkflowService:
 
     APP_NAME = "bottleneck"
     USER_ID = "bottleneck-system"
+    LIVE_OUTPUT_KEYS = (
+        "triage_output",
+        "investigation_supplier",
+        "investigation_logistics",
+        "investigation_inventory",
+        "investigation_production",
+        "langgraph_supervision",
+        "risk_interpretation",
+        "alternative_supplier_research",
+        "recovery_proposals",
+        "reflection_review",
+    )
 
     def __init__(
         self,
@@ -169,6 +186,24 @@ class IncidentWorkflowService:
                 adk_sessions, adk_session_id, payload
             )
             state = await self._state(adk_sessions, adk_session_id)
+            self._publish_agent_outputs(workflow_run_id, state)
+
+            self._progress(
+                workflow_run_id,
+                "LANGGRAPH_SUPERVISION",
+                "LangGraph validating shared ADK state",
+                40,
+            )
+            graph_output = self._run_langgraph_stage(
+                incident_id, workflow_run_id, state
+            )
+            await self._inject_state(
+                adk_sessions,
+                adk_session_id,
+                {"langgraph_supervision": graph_output},
+            )
+            state = await self._state(adk_sessions, adk_session_id)
+            self._publish_agent_outputs(workflow_run_id, state)
 
             self._progress(workflow_run_id, "EVIDENCE", "Aggregating evidence and deterministic risk", 46)
             risk, simulation, routing, required_quantity, evidence_ids = self._persist_investigation_results(
@@ -207,6 +242,8 @@ class IncidentWorkflowService:
                     deterministic_score_unchanged=True,
                 ).model_dump(mode="json"),
             )
+            state = await self._state(adk_sessions, adk_session_id)
+            self._publish_agent_outputs(workflow_run_id, state)
 
             if routing.should_run:
                 self._progress(workflow_run_id, "SUPPLIER_RESEARCH", "Alternative supplier crew researching options", 65)
@@ -238,12 +275,23 @@ class IncidentWorkflowService:
                 self._persist_supplier_candidates(
                     incident_id, workflow_run_id, alternative_research
                 )
+                self._record_crewai_role_runs(
+                    incident_id, workflow_run_id, alternative_research
+                )
+                self._publish_agent_outputs(workflow_run_id, state)
             else:
                 alternative_research = {
                     "skipped": True,
                     "reason": routing.reason,
                     "candidates": [],
                 }
+                await self._inject_state(
+                    adk_sessions,
+                    adk_session_id,
+                    {"alternative_supplier_research": alternative_research},
+                )
+                state = await self._state(adk_sessions, adk_session_id)
+                self._publish_agent_outputs(workflow_run_id, state)
 
             last_pipeline: StrategyPipelineResult | None = None
             last_review: ReflectionReview | None = None
@@ -277,6 +325,7 @@ class IncidentWorkflowService:
                     ),
                 )
                 state = await self._state(adk_sessions, adk_session_id)
+                self._publish_agent_outputs(workflow_run_id, state)
                 plan = RecoveryPlanningOutput.model_validate(state.get("recovery_proposals"))
                 last_pipeline = self._evaluate_and_persist(
                     incident_id,
@@ -323,6 +372,7 @@ class IncidentWorkflowService:
                     ).model_dump(mode="json"),
                 )
                 state = await self._state(adk_sessions, adk_session_id)
+                self._publish_agent_outputs(workflow_run_id, state)
                 last_review = ReflectionReview.model_validate(state.get("reflection_review"))
                 if last_pipeline.recommended_strategy_id is None and last_review.passed:
                     last_review = last_review.model_copy(
@@ -759,6 +809,143 @@ class IncidentWorkflowService:
             )
             session.commit()
 
+    def _run_langgraph_stage(
+        self,
+        incident_id: str,
+        workflow_run_id: str,
+        state: dict[str, Any],
+    ) -> dict[str, Any]:
+        started = datetime.now(timezone.utc)
+        started_clock = time.perf_counter()
+        execution_id = str(uuid4())
+        with self.sessions() as session:
+            session.add(
+                AgentRunRow(
+                    execution_id=execution_id,
+                    incident_id=incident_id,
+                    workflow_run_id=workflow_run_id,
+                    agent_name="langgraph_state_supervisor",
+                    start_time=started,
+                    status="RUNNING",
+                    retry_count=0,
+                    model_identifier="langgraph/StateGraph",
+                    token_usage={},
+                )
+            )
+            session.commit()
+        required = [
+            "triage_output",
+            "investigation_supplier",
+            "investigation_logistics",
+            "investigation_inventory",
+            "investigation_production",
+        ]
+        try:
+            result = run_langgraph_supervisor(
+                incident_id=incident_id,
+                shared_state=state,
+                required_outputs=required,
+            )
+            if result.status != "READY":
+                raise ValueError(result.summary)
+            status = "COMPLETED"
+            error = None
+            return result.model_dump(mode="json")
+        except Exception as exc:
+            status = "FAILED"
+            error = str(exc)[:500]
+            raise
+        finally:
+            ended = datetime.now(timezone.utc)
+            with self.sessions() as session:
+                row = session.get(AgentRunRow, execution_id)
+                if row:
+                    row.status = status
+                    row.error = error
+                    row.end_time = ended
+                    row.duration_ms = round(
+                        (time.perf_counter() - started_clock) * 1000, 3
+                    )
+                session.commit()
+
+    def _record_crewai_role_runs(
+        self,
+        incident_id: str,
+        workflow_run_id: str,
+        research: Any,
+    ) -> None:
+        if not isinstance(research, dict):
+            return
+        roles = research.get("role_outputs") or []
+        name_map = {
+            "Supplier Researcher": "crewai_supplier_researcher",
+            "Supplier Analyst": "crewai_supplier_analyst",
+            "Supplier Reviewer": "crewai_supplier_reviewer",
+        }
+        now = datetime.now(timezone.utc)
+        with self.sessions() as session:
+            for role in roles:
+                if not isinstance(role, dict):
+                    continue
+                agent_name = name_map.get(str(role.get("role")))
+                if not agent_name:
+                    continue
+                existing = session.scalar(
+                    select(AgentRunRow).where(
+                        AgentRunRow.workflow_run_id == workflow_run_id,
+                        AgentRunRow.agent_name == agent_name,
+                        AgentRunRow.tool_name.is_(None),
+                    )
+                )
+                if existing:
+                    continue
+                session.add(
+                    AgentRunRow(
+                        execution_id=str(uuid4()),
+                        incident_id=incident_id,
+                        workflow_run_id=workflow_run_id,
+                        agent_name=agent_name,
+                        start_time=now,
+                        end_time=now,
+                        duration_ms=None,
+                        status=str(role.get("status") or "COMPLETED"),
+                        retry_count=0,
+                        model_identifier="crewai/sequential-role",
+                        token_usage={},
+                    )
+                )
+            session.commit()
+
+    def _publish_agent_outputs(
+        self, workflow_run_id: str, state: dict[str, Any]
+    ) -> None:
+        with self.sessions() as session:
+            row = session.get(WorkflowRunRow, workflow_run_id)
+            if row is None:
+                return
+            persisted = dict(row.state or {})
+            outputs = dict(persisted.get("agent_outputs") or {})
+            for key in self.LIVE_OUTPUT_KEYS:
+                if state.get(key) is not None:
+                    outputs[key] = jsonable_encoder(
+                        self._structured_value(state.get(key))
+                    )
+            alternative = outputs.get("alternative_supplier_research")
+            if isinstance(alternative, dict):
+                role_key_map = {
+                    "Supplier Researcher": "crewai_supplier_researcher",
+                    "Supplier Analyst": "crewai_supplier_analyst",
+                    "Supplier Reviewer": "crewai_supplier_reviewer",
+                }
+                for role in alternative.get("role_outputs") or []:
+                    if not isinstance(role, dict):
+                        continue
+                    output_key = role_key_map.get(str(role.get("role")))
+                    if output_key:
+                        outputs[output_key] = jsonable_encoder(role)
+            row.state = {**persisted, "agent_outputs": outputs}
+            session.commit()
+
     def _persist_investigation_results(
         self, incident_id: str, state: dict[str, Any]
     ) -> tuple[RiskAssessment, SimulationResult, Any, int, list[str]]:
@@ -979,8 +1166,13 @@ class IncidentWorkflowService:
         with self.sessions() as session:
             row = session.get(WorkflowRunRow, workflow_run_id)
             if row:
+                persisted = dict(row.state or {})
                 row.status = "COMPLETED"
-                row.state = jsonable_encoder(state)
+                row.state = {
+                    **persisted,
+                    **jsonable_encoder(state),
+                    "agent_outputs": persisted.get("agent_outputs", {}),
+                }
                 row.completed_at = now
             incident = session.get(IncidentRow, incident_id)
             if incident:

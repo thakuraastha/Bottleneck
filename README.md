@@ -1,12 +1,13 @@
 # BOTTLENECK
 
-Multi-agent supply-chain disruption and recovery system built with Google ADK, CrewAI, FastAPI, vanilla HTML/CSS/JavaScript, SQLAlchemy, and SQLite.
+Multi-agent supply-chain disruption and recovery system built with Google ADK, CrewAI, LangGraph, FastAPI, vanilla HTML/CSS/JavaScript, SQLAlchemy, and SQLite.
 
 ## What works
 
 - Synthetic Motor X7 supplier-delay scenario with repeatable CSV generation and database seeding.
 - Four read-only MCP supply-chain tools, daily inventory/production simulation, deterministic risk, strategy scoring, and mandatory constraints.
-- Nine typed ADK agents, real graph fan-out/join investigation, and a CrewAI Researcher/Analyst/Reviewer agent reached through A2A JSON-RPC.
+- Nine typed ADK agents, real graph fan-out/join investigation, a CrewAI Researcher/Analyst/Reviewer crew reached through A2A JSON-RPC, and a LangGraph shared-state supervisor.
+- Live frontend cards expose every persisted ADK, CrewAI, and LangGraph output while the workflow is running.
 - Evidence provenance, explicit conditional routing, bounded replanning, incident memory, and guarded human approval.
 - Idempotent event ingestion, 22-table persistence model, FastAPI endpoints, and a responsive operations dashboard.
 - ADK agent/model/tool callbacks that validate inputs and persist real execution events, errors, token usage, and security blocks.
@@ -15,7 +16,7 @@ Multi-agent supply-chain disruption and recovery system built with Google ADK, C
 
 The live `/incidents/{id}/run` endpoint requires `GOOGLE_API_KEY` or `GEMINI_API_KEY`. Without a key it returns `503` and creates no fake execution records. The workflow covers triage, parallel specialist investigations, evidence aggregation, deterministic risk, A2A supplier research, strategy planning, reflection, guarded approval, and bounded rejection-triggered replanning.
 
-The default model is `gemini-3.8-flash`; override it with `BOTTLENECK_GEMINI_MODEL` when required.
+ADK uses `BOTTLENECK_GEMINI_MODEL`; CrewAI uses `BOTTLENECK_CREWAI_MODEL` so the nested three-role crew does not compete with ADK for the same per-model request quota. Both are configurable.
 
 ## Native setup
 

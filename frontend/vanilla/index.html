@@ -162,13 +162,13 @@
 
           <section class="tab-panel" data-panel="agents">
             <div class="section-intro">
-              <div><p class="eyebrow">Nine-stage orchestration</p><h2>Agent workflow</h2></div>
-              <span id="agent-completion" class="soft-badge">0 / 9 complete</span>
+              <div><p class="eyebrow">Google ADK · CrewAI · LangGraph</p><h2>Live multi-agent workflow</h2><p class="muted">Every card exposes the latest persisted output from the active workflow run.</p></div>
+              <span id="agent-completion" class="soft-badge">0 / 13 complete</span>
             </div>
-            <div id="agent-grid" class="agent-grid"></div>
+            <div id="agent-grid" class="agent-grid" aria-live="polite"></div>
             <article class="card">
-              <div class="card-header"><div><p class="eyebrow">Execution trace</p><h3>Latest agent events</h3></div></div>
-              <div id="agent-log" class="timeline"></div>
+              <div class="card-header"><div><p class="eyebrow">Execution trace</p><h3>Live agent and tool events</h3></div><span class="live-pulse"><i></i>Polling live</span></div>
+              <div id="agent-log" class="timeline" aria-live="polite"></div>
             </article>
           </section>
 

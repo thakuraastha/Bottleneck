@@ -26,11 +26,19 @@ class ResearchedSupplier(BaseModel):
     source_record_id: str
 
 
+class CrewRoleOutput(BaseModel):
+    role: str
+    task_name: str
+    status: str = "COMPLETED"
+    output: str
+
+
 class SupplierResearchResult(BaseModel):
     component_id: str
     requested_quantity: int = Field(ge=0)
     candidates: list[ResearchedSupplier]
     review_notes: list[str] = Field(default_factory=list)
+    role_outputs: list[CrewRoleOutput] = Field(default_factory=list)
     source_system: str = "synthetic_supplier_database"
 
 
@@ -131,19 +139,50 @@ def build_supplier_research_crew(model: str) -> Crew:
 class SupplierResearchCrewAdapter:
     """Narrow adapter used by the ADK alternative-supplier agent."""
 
-    def __init__(self, model: str) -> None:
+    def __init__(self, model: str, *, fallback_models: list[str] | None = None) -> None:
+        self.models = list(dict.fromkeys([model, *(fallback_models or [])]))
         self.crew = build_supplier_research_crew(model)
 
     def run(self, *, component_id: str, requested_quantity: int, minimum_quality: float) -> SupplierResearchResult:
-        output = self.crew.kickoff(inputs={
-            "component_id": component_id,
-            "requested_quantity": requested_quantity,
-            "minimum_quality": minimum_quality,
-        })
+        output = None
+        last_error: Exception | None = None
+        for index, model in enumerate(self.models):
+            crew = self.crew if index == 0 else build_supplier_research_crew(model)
+            try:
+                output = crew.kickoff(inputs={
+                    "component_id": component_id,
+                    "requested_quantity": requested_quantity,
+                    "minimum_quality": minimum_quality,
+                })
+                break
+            except Exception as exc:
+                last_error = exc
+        if output is None:
+            raise RuntimeError(
+                f"CrewAI supplier research failed across {len(self.models)} model(s): {last_error}"
+            ) from last_error
         if output.pydantic is None:
             raise ValueError("CrewAI supplier research did not return validated structured output")
         result = SupplierResearchResult.model_validate(output.pydantic)
         if result.component_id != component_id:
             raise ValueError("CrewAI output component does not match the request")
-        return result
+        roles = ("Supplier Researcher", "Supplier Analyst", "Supplier Reviewer")
+        task_names = (
+            "retrieve_supplier_candidates",
+            "compare_supplier_candidates",
+            "review_supplier_candidates",
+        )
+        role_outputs = []
+        for role, task_name, task_output in zip(
+            roles, task_names, output.tasks_output, strict=False
+        ):
+            raw = str(getattr(task_output, "raw", task_output)).strip()
+            role_outputs.append(
+                CrewRoleOutput(
+                    role=role,
+                    task_name=task_name,
+                    output=raw[:6000],
+                )
+            )
+        return result.model_copy(update={"role_outputs": role_outputs})
 
