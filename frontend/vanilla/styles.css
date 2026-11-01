@@ -179,6 +179,7 @@ a { color: inherit; }
 .soft-badge { color: var(--primary); background: var(--primary-soft); }
 .status { color: #5e687c; background: #eef0f4; }
 .status.completed, .status.approved, .status.pass, .status.active { color: #237b72; background: var(--teal-soft); }
+.status.recovered { color: #356ea8; background: #e9f2ff; }
 .status.running, .status.investigating, .status.waiting-for-approval, .status.high { color: #986115; background: var(--amber-soft); }
 .status.failed, .status.rejected, .status.critical, .status.fail { color: #ad4050; background: var(--red-soft); }
 .status.pending, .status.neutral, .status.skipped { color: #687186; background: #eff1f5; }

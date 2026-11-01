@@ -12,7 +12,7 @@ from google.adk.tools.base_tool import BaseTool
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.database.tables import AgentRunRow, SecurityEventRow
+from app.database.tables import AgentRunRow, SecurityEventRow, WorkflowRunRow
 from app.security import GuardrailService, GuardrailViolation
 
 
@@ -132,6 +132,29 @@ class AdkObservabilityCallbacks:
         with self._lock:
             execution_id = self._active_agents.pop(key, None)
         self._finish(execution_id, status="COMPLETED")
+        self._mark_prior_attempts_recovered(context, execution_id)
+
+    def _mark_prior_attempts_recovered(
+        self, context: Context, completed_execution_id: str | None
+    ) -> None:
+        """Keep transient provider attempts visible without labeling a recovered agent broken."""
+        _, workflow_run_id = self._scope(context)
+        if not workflow_run_id or not completed_execution_id:
+            return
+        with self._sessions() as session:
+            rows = session.scalars(
+                select(AgentRunRow).where(
+                    AgentRunRow.workflow_run_id == workflow_run_id,
+                    AgentRunRow.agent_name == context.agent_name,
+                    AgentRunRow.tool_name.is_(None),
+                    AgentRunRow.status == "FAILED",
+                    AgentRunRow.execution_id != completed_execution_id,
+                )
+            ).all()
+            for row in rows:
+                row.status = "RECOVERED"
+            if rows:
+                session.commit()
 
     @staticmethod
     def _model_request_fragments(request: LlmRequest) -> list[str]:
@@ -204,9 +227,65 @@ class AdkObservabilityCallbacks:
         except GuardrailViolation as exc:
             self._record_security(context, stage="after_tool", violation=exc)
             raise
+        if tool.name == "run_supplier_research":
+            self._persist_crewai_role_outputs(context, tool_response)
         with self._lock:
             execution_id = self._active_tools.pop(self._tool_key(context, tool), None)
         self._finish(execution_id, status="COMPLETED")
+
+    def _persist_crewai_role_outputs(
+        self, context: Context, tool_response: dict[str, Any]
+    ) -> None:
+        """Preserve each CrewAI role before the ADK bridge summarizes tool output."""
+        roles = tool_response.get("role_outputs")
+        if not isinstance(roles, list):
+            return
+        incident_id, workflow_run_id = self._scope(context)
+        if not incident_id or not workflow_run_id:
+            return
+        name_map = {
+            "Supplier Researcher": "crewai_supplier_researcher",
+            "Supplier Analyst": "crewai_supplier_analyst",
+            "Supplier Reviewer": "crewai_supplier_reviewer",
+        }
+        now = self._now()
+        with self._sessions() as session:
+            workflow = session.get(WorkflowRunRow, workflow_run_id)
+            if workflow is None:
+                return
+            state = dict(workflow.state or {})
+            outputs = dict(state.get("agent_outputs") or {})
+            for role in roles:
+                if not isinstance(role, dict):
+                    continue
+                agent_name = name_map.get(str(role.get("role")))
+                if not agent_name:
+                    continue
+                outputs[agent_name] = role
+                existing = session.scalar(
+                    select(AgentRunRow).where(
+                        AgentRunRow.workflow_run_id == workflow_run_id,
+                        AgentRunRow.agent_name == agent_name,
+                        AgentRunRow.tool_name.is_(None),
+                    )
+                )
+                if existing is None:
+                    session.add(
+                        AgentRunRow(
+                            execution_id=str(uuid4()),
+                            incident_id=incident_id,
+                            workflow_run_id=workflow_run_id,
+                            agent_name=agent_name,
+                            start_time=now,
+                            end_time=now,
+                            status=str(role.get("status") or "COMPLETED"),
+                            retry_count=0,
+                            model_identifier="crewai/sequential-role",
+                            token_usage={},
+                        )
+                    )
+            workflow.state = {**state, "agent_outputs": outputs}
+            session.commit()
 
     def on_tool_error(
         self,

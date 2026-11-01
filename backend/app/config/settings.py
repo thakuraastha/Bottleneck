@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     medium_risk_alternative_research: bool = True
     gemini_model: str = "gemini-flash-lite-latest"
     gemini_fallback_models: str = "gemini-3.5-flash-lite,gemini-3.1-flash-lite"
+    sequential_gemini_model: str = "gemini-3.1-flash-lite"
     crewai_model: str = "gemini-2.5-flash-lite"
     crewai_fallback_models: str = "gemini-3.1-flash-lite"
     model_retry_attempts: int = Field(default=1, ge=1, le=5)

@@ -187,6 +187,8 @@ class IncidentWorkflowService:
             )
             state = await self._state(adk_sessions, adk_session_id)
             self._publish_agent_outputs(workflow_run_id, state)
+            if active_model != "deterministic-continuity":
+                active_model = self.settings.sequential_gemini_model
 
             self._progress(
                 workflow_run_id,

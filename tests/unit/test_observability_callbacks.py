@@ -88,6 +88,44 @@ def test_tool_error_callback_persists_failure(tmp_path) -> None:
         assert row.error == "tool unavailable"
 
 
+def test_supplier_research_callback_persists_each_crewai_role_output(tmp_path) -> None:
+    callbacks, sessions = _callbacks(tmp_path)
+    context = _context(function_call_id="CALL-CREW")
+    context.agent_name = "alternative_supplier_agent"
+    tool = SimpleNamespace(name="run_supplier_research")
+    roles = [
+        {
+            "role": role,
+            "task_name": task,
+            "status": "COMPLETED",
+            "output": f"{role} evidence",
+        }
+        for role, task in (
+            ("Supplier Researcher", "retrieve_supplier_candidates"),
+            ("Supplier Analyst", "compare_supplier_candidates"),
+            ("Supplier Reviewer", "review_supplier_candidates"),
+        )
+    ]
+
+    callbacks.before_tool(tool, {"component_id": "MOTOR-X7"}, context)
+    callbacks.after_tool(tool, {}, context, {"role_outputs": roles})
+
+    with sessions() as session:
+        workflow = session.get(WorkflowRunRow, "RUN-OBS")
+        assert workflow is not None
+        outputs = workflow.state["agent_outputs"]
+        assert set(outputs) == {
+            "crewai_supplier_researcher",
+            "crewai_supplier_analyst",
+            "crewai_supplier_reviewer",
+        }
+        role_rows = session.scalars(
+            select(AgentRunRow).where(AgentRunRow.tool_name.is_(None))
+        ).all()
+        assert {row.agent_name for row in role_rows} == set(outputs)
+        assert {row.status for row in role_rows} == {"COMPLETED"}
+
+
 def test_callbacks_without_workflow_scope_do_not_fabricate_events(tmp_path) -> None:
     callbacks, sessions = _callbacks(tmp_path)
     context = _context()
@@ -113,7 +151,8 @@ def test_retried_agent_attempts_receive_persisted_ordinals(tmp_path) -> None:
     with sessions() as session:
         rows = session.scalars(select(AgentRunRow).order_by(AgentRunRow.start_time)).all()
         assert [row.retry_count for row in rows] == [0, 1]
-        assert [row.status for row in rows] == ["FAILED", "COMPLETED"]
+        assert [row.status for row in rows] == ["RECOVERED", "COMPLETED"]
+        assert rows[0].error == "temporary"
 
 
 def test_before_model_handles_pydantic_response_schema_without_serializing_class(tmp_path) -> None:
