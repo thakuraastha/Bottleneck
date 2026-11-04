@@ -24,7 +24,7 @@ from app.tools.agent_tools import (
     PRODUCTION_TOOLS,
 )
 
-from .prompts import (
+from app.agents.prompts import (
     ALTERNATIVE_SUPPLIER_INSTRUCTION,
     INVENTORY_INSTRUCTION,
     LOGISTICS_INSTRUCTION,
@@ -210,3 +210,41 @@ def build_agent_catalog(
         recovery_planner=recovery_planner,
         reflection_quality=reflection,
     )
+
+
+if __name__ == "__main__":
+    from app.config import get_settings
+
+    settings = get_settings()
+    model_name = settings.gemini_model
+    print("=" * 70)
+    print(f"BUILDING BOTTLENECK AGENT CATALOG (Model: {model_name})")
+    print("=" * 70)
+    catalog = build_agent_catalog(model_name)
+    print("\n✓ 9 ADK Agents and Parallel Workflow Instantiated Successfully:\n")
+    agent_attrs = [
+        ("orchestrator", "Triage & Routing"),
+        ("supplier_intelligence", "MCP Supplier Intelligence"),
+        ("logistics_intelligence", "MCP Logistics & Delay Intelligence"),
+        ("demand_inventory", "Demand & Inventory Analysis"),
+        ("production_impact", "Production Line Downtime Impact"),
+        ("risk_analyst", "Deterministic Risk Interpretation"),
+        ("alternative_supplier", "CrewAI A2A Research Bridge"),
+        ("recovery_planner", "Allocation & Strategy Proposals"),
+        ("reflection_quality", "Quality Gate & Constraint Review"),
+    ]
+    for attr, role in agent_attrs:
+        agent = getattr(catalog, attr)
+        tools = [getattr(t, "name", getattr(t, "__name__", str(t))) for t in (getattr(agent, "tools", []) or [])]
+        schema = getattr(agent, "output_schema", None)
+        schema_name = schema.__name__ if hasattr(schema, "__name__") else "Dict/State"
+        print(f"  🤖 {agent.name:<30} [{role}]")
+        print(f"     Model:  {agent.model}")
+        print(f"     Output: {schema_name}")
+        print(f"     Tools:  {', '.join(tools) if tools else 'None'}\n")
+
+    print(f"  ⚡ Workflow: {catalog.parallel_investigation.name}")
+    print(f"     Max Concurrency: {catalog.parallel_investigation.max_concurrency}")
+    print(f"     Nodes: Supplier, Logistics, Inventory, Production -> JoinNode\n")
+    print("=" * 70)
+
