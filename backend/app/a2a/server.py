@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.apps import A2AStarletteApplication
@@ -15,7 +16,8 @@ from app.a2a.contracts import (
     SupplierResearchA2AResponse,
 )
 from app.config import get_settings
-from app.crews import SupplierResearchCrewAdapter
+from app.crews import CrewProgressRecorder, SupplierResearchCrewAdapter
+from app.database import build_engine, session_factory
 
 
 class CrewAISupplierAgentExecutor(AgentExecutor):
@@ -38,12 +40,34 @@ class CrewAISupplierAgentExecutor(AgentExecutor):
         request = SupplierResearchA2ARequest.model_validate_json(
             context.get_user_input()
         )
-        result = await asyncio.to_thread(
-            self._adapter.run,
-            component_id=request.component_id,
-            requested_quantity=request.requested_quantity,
-            minimum_quality=request.minimum_quality,
-        )
+        recorder = None
+        engine = None
+        if request.incident_id and request.workflow_run_id:
+            engine = build_engine(get_settings().database_url)
+            recorder = CrewProgressRecorder(
+                session_factory(engine),
+                incident_id=request.incident_id,
+                workflow_run_id=request.workflow_run_id,
+            )
+            recorder.start()
+        run_kwargs = {
+            "component_id": request.component_id,
+            "requested_quantity": request.requested_quantity,
+            "minimum_quality": request.minimum_quality,
+        }
+        if recorder is not None and "task_callback" in inspect.signature(
+            self._adapter.run
+        ).parameters:
+            run_kwargs["task_callback"] = recorder.task_completed
+        try:
+            result = await asyncio.to_thread(self._adapter.run, **run_kwargs)
+        except Exception as exc:
+            if recorder is not None:
+                recorder.fail(exc)
+            raise
+        finally:
+            if engine is not None:
+                engine.dispose()
         response = SupplierResearchA2AResponse(result=result)
         await event_queue.enqueue_event(
             new_agent_text_message(

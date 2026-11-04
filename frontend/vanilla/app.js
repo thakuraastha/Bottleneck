@@ -344,9 +344,9 @@ function uniqueTopLevelAgents() {
   return latest;
 }
 
-function agentOutputMarkup(output) {
+function agentOutputMarkup(output, placeholder = "Output will appear here while the workflow runs.") {
   if (output === null || output === undefined) {
-    return `<div class="agent-output-empty">Output will appear here while the workflow runs.</div>`;
+    return `<div class="agent-output-empty">${escapeHTML(placeholder)}</div>`;
   }
   const text = typeof output === "string" ? output : JSON.stringify(output, null, 2);
   const summary = typeof output === "object"
@@ -365,10 +365,18 @@ function renderAgents() {
     const run = latest.get(agent.name);
     const output = outputs[agent.outputKey];
     const displayStatus = run?.status || (output?.skipped ? "SKIPPED" : output ? "COMPLETED" : "PENDING");
+    const pendingCopy = (() => {
+      if (displayStatus === "RUNNING") return "Working now. This card updates as soon as the stage publishes evidence.";
+      if (agent.name === "langgraph_state_supervisor") return "Waiting for all four investigation agents to join. The supervisor itself normally completes in milliseconds.";
+      if (agent.name === "crewai_supplier_researcher") return "Queued behind the A2A bridge. It will retrieve authorized supplier records first.";
+      if (agent.name === "crewai_supplier_analyst") return "Waiting for the Researcher output, then it will compare cost, capacity, quality, and lead time.";
+      if (agent.name === "crewai_supplier_reviewer") return "Waiting for Researcher and Analyst outputs, then it will apply the final eligibility gate.";
+      return "Waiting for the required upstream stage.";
+    })();
     return `<article class="agent-card" data-framework="${className(agent.framework)}">
       <div class="agent-card-top"><span class="agent-number">STAGE ${String(index + 1).padStart(2, "0")}</span><span class="framework-badge">${escapeHTML(agent.framework)}</span></div>
       ${statusBadge(displayStatus)}<h3>${escapeHTML(agent.title)}</h3><p>${escapeHTML(agent.copy)}</p>
-      ${agentOutputMarkup(output)}
+      ${agentOutputMarkup(output, pendingCopy)}
       <div class="agent-meta"><span>${escapeHTML(run?.model_identifier || agent.framework)}</span><span>${run?.duration_ms == null ? "—" : `${number(run.duration_ms)} ms`}</span></div>
     </article>`;
   }).join("");

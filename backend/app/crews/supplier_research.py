@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from crewai import Agent, Crew, Process, Task
@@ -56,7 +57,11 @@ def query_authorized_component_suppliers(component_id: str) -> list[dict[str, An
         engine.dispose()
 
 
-def build_supplier_research_crew(model: str) -> Crew:
+def build_supplier_research_crew(
+    model: str,
+    *,
+    task_callback: Callable[[Any], Any] | None = None,
+) -> Crew:
     """Build the required real CrewAI researcher/analyst/reviewer crew."""
     llm_name = model if "/" in model else f"gemini/{model}"
     researcher = Agent(
@@ -67,8 +72,9 @@ def build_supplier_research_crew(model: str) -> Crew:
         tools=[query_authorized_component_suppliers],
         allow_delegation=False,
         allow_code_execution=False,
-        max_iter=4,
+        max_iter=3,
         max_retry_limit=1,
+        max_execution_time=15,
         verbose=False,
     )
     analyst = Agent(
@@ -78,8 +84,9 @@ def build_supplier_research_crew(model: str) -> Crew:
         llm=llm_name,
         allow_delegation=False,
         allow_code_execution=False,
-        max_iter=4,
+        max_iter=2,
         max_retry_limit=1,
+        max_execution_time=15,
         verbose=False,
     )
     reviewer = Agent(
@@ -89,8 +96,9 @@ def build_supplier_research_crew(model: str) -> Crew:
         llm=llm_name,
         allow_delegation=False,
         allow_code_execution=False,
-        max_iter=4,
+        max_iter=2,
         max_retry_limit=1,
+        max_execution_time=15,
         verbose=False,
     )
     research_task = Task(
@@ -133,6 +141,7 @@ def build_supplier_research_crew(model: str) -> Crew:
         cache=False,
         verbose=False,
         tracing=False,
+        task_callback=task_callback,
     )
 
 
@@ -143,11 +152,24 @@ class SupplierResearchCrewAdapter:
         self.models = list(dict.fromkeys([model, *(fallback_models or [])]))
         self.crew = build_supplier_research_crew(model)
 
-    def run(self, *, component_id: str, requested_quantity: int, minimum_quality: float) -> SupplierResearchResult:
+    def run(
+        self,
+        *,
+        component_id: str,
+        requested_quantity: int,
+        minimum_quality: float,
+        task_callback: Callable[[Any], Any] | None = None,
+    ) -> SupplierResearchResult:
         output = None
         last_error: Exception | None = None
         for index, model in enumerate(self.models):
-            crew = self.crew if index == 0 else build_supplier_research_crew(model)
+            crew = (
+                self.crew
+                if index == 0 and task_callback is None
+                else build_supplier_research_crew(
+                    model, task_callback=task_callback
+                )
+            )
             try:
                 output = crew.kickoff(inputs={
                     "component_id": component_id,

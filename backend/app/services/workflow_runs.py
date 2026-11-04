@@ -723,6 +723,29 @@ class IncidentWorkflowService:
             "requested_quantity": requested_quantity,
             "candidates": candidates,
             "review_notes": ["Eligibility derived from persisted status, quality, and capacity."],
+            "role_outputs": [
+                {
+                    "role": "Supplier Researcher",
+                    "task_name": "retrieve_supplier_candidates",
+                    "status": "COMPLETED",
+                    "output": f"Retrieved {len(candidates)} authorized persisted supplier records for {component_id} through deterministic continuity.",
+                    "model_identifier": "deterministic-continuity",
+                },
+                {
+                    "role": "Supplier Analyst",
+                    "task_name": "compare_supplier_candidates",
+                    "status": "COMPLETED",
+                    "output": "Compared exact persisted cost, lead-time, capacity, quality, and reliability fields through deterministic continuity.",
+                    "model_identifier": "deterministic-continuity",
+                },
+                {
+                    "role": "Supplier Reviewer",
+                    "task_name": "review_supplier_candidates",
+                    "status": "COMPLETED",
+                    "output": "Applied ACTIVE-status, minimum-quality, and positive-capacity eligibility gates through deterministic continuity.",
+                    "model_identifier": "deterministic-continuity",
+                },
+            ],
             "source_system": "synthetic_supplier_database",
         }
 
@@ -900,9 +923,14 @@ class IncidentWorkflowService:
                     )
                 )
                 if existing:
-                    continue
-                session.add(
-                    AgentRunRow(
+                    existing.status = str(role.get("status") or "COMPLETED")
+                    existing.error = None
+                    existing.end_time = now
+                    existing.model_identifier = str(
+                        role.get("model_identifier") or "crewai/sequential-role"
+                    )
+                else:
+                    session.add(AgentRunRow(
                         execution_id=str(uuid4()),
                         incident_id=incident_id,
                         workflow_run_id=workflow_run_id,
@@ -912,10 +940,11 @@ class IncidentWorkflowService:
                         duration_ms=None,
                         status=str(role.get("status") or "COMPLETED"),
                         retry_count=0,
-                        model_identifier="crewai/sequential-role",
+                        model_identifier=str(
+                            role.get("model_identifier") or "crewai/sequential-role"
+                        ),
                         token_usage={},
-                    )
-                )
+                    ))
             session.commit()
 
     def _publish_agent_outputs(

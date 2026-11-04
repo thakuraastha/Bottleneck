@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any, Callable
 
+from google.adk.tools.tool_context import ToolContext
+
 from app.config import get_settings
 from app.database import build_engine, session_factory
 from app.simulation import SupplySimulator
@@ -88,6 +90,7 @@ async def run_supplier_research(
     component_id: str,
     requested_quantity: int,
     minimum_quality: float = 80.0,
+    tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """Call the remote CrewAI research agent through A2A JSON-RPC."""
     from app.a2a import SupplierResearchA2AClient
@@ -98,6 +101,16 @@ async def run_supplier_research(
             component_id=component_id,
             requested_quantity=requested_quantity,
             minimum_quality=minimum_quality,
+            incident_id=(
+                str(tool_context.state.get("incident_id"))
+                if tool_context and tool_context.state.get("incident_id")
+                else None
+            ),
+            workflow_run_id=(
+                str(tool_context.state.get("workflow_run_id"))
+                if tool_context and tool_context.state.get("workflow_run_id")
+                else None
+            ),
         )
     )
     return {

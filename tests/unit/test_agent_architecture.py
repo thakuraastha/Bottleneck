@@ -70,3 +70,5 @@ def test_nested_supplier_crew_has_required_roles_and_structured_review() -> None
         "review_supplier_candidates",
     ]
     assert crew.tasks[-1].output_pydantic.__name__ == "SupplierResearchResult"
+    assert [agent.max_execution_time for agent in crew.agents] == [15, 15, 15]
+    assert [agent.max_iter for agent in crew.agents] == [3, 2, 2]

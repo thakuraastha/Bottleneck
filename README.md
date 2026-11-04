@@ -18,6 +18,8 @@ The live `/incidents/{id}/run` endpoint requires `GOOGLE_API_KEY` or `GEMINI_API
 
 Parallel ADK investigation uses `BOTTLENECK_GEMINI_MODEL`, later sequential ADK stages use `BOTTLENECK_SEQUENTIAL_GEMINI_MODEL`, and CrewAI uses `BOTTLENECK_CREWAI_MODEL`. Splitting the three workloads across configurable models prevents one stage from exhausting another stage's per-model request quota.
 
+Live stages have a configurable 35-second ceiling. If a provider is congested, deterministic continuity uses the same persisted records and publishes source-labeled outputs instead of leaving dashboard cards hanging.
+
 ## Native setup
 
 Python 3.13 is recommended; the maintained CrewAI release used here is not available under Python 3.14.
