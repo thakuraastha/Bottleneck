@@ -70,11 +70,13 @@ The API seeds the persistent Docker volume only when no suppliers exist. Set `GO
 
 Open `http://127.0.0.1:3000` after both containers become healthy.
 
-## Cloud deployment
+## Google Cloud Run deployment
 
-The repository includes a Vercel container deployment (`Dockerfile.vercel` + `vercel.json`) and a Render Blueprint (`render.yaml`). The live dashboard is at `https://bottleneck.vercel.app`. Configure `GEMINI_API_KEY` in the platform's encrypted environment settings; never commit it.
+The production container serves the dashboard, FastAPI endpoints, and A2A endpoint from one Cloud Run URL. It reads Cloud Run's assigned `PORT`, keeps the Gemini key in Secret Manager, and defaults to a seeded temporary SQLite database when a managed database is not configured.
 
-The Vercel demonstration uses ephemeral container-local SQLite. Health, dashboard, A2A, and single-request workflow execution are deployed, but durable multi-request cloud history requires setting `BOTTLENECK_DATABASE_URL` to a managed SQL database. Use the local launcher for the faculty walkthrough because its SQLite audit history persists reliably.
+For a faculty demonstration with no local processes, connect the `main` branch to Cloud Run and use the exact settings in [`docs/CLOUD_RUN_DEPLOYMENT.md`](docs/CLOUD_RUN_DEPLOYMENT.md). Set maximum instances to `1` while using SQLite, and select instance-based billing so the asynchronous multi-agent workflow keeps receiving CPU after the start request returns.
+
+Temporary SQLite state can be reset by deploying a new revision, but it is not durable across instance replacement. For durable production history, set `BOTTLENECK_DATABASE_URL` to a managed SQL database before allowing more than one instance.
 
 ## Verification
 

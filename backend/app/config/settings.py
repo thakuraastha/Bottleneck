@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     maximum_additional_budget: float = Field(default=100_000.0, ge=0)
     model_input_cost_per_million_usd: float = Field(default=0.10, ge=0)
     model_output_cost_per_million_usd: float = Field(default=0.40, ge=0)
-    cloud_deployment_url: str | None = "https://bottleneck.vercel.app"
+    cloud_deployment_url: str | None = None
 
     risk_delivery_weight: float = 0.25
     risk_inventory_weight: float = 0.30
