@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ErrorResponse(BaseModel):
@@ -16,6 +16,22 @@ class EventIngestionResponse(BaseModel):
     incident_id: str
     duplicate: bool
     incident_created: bool
+
+
+class EmailIncidentRequest(BaseModel):
+    message_id: str = Field(min_length=1, max_length=200)
+    sender: str = Field(min_length=3, max_length=320)
+    subject: str = Field(min_length=3, max_length=500)
+    body: str = Field(min_length=10, max_length=20_000)
+    received_at: datetime
+
+
+class EmailIncidentResponse(EventIngestionResponse):
+    event_type: str
+    supplier_id: str | None
+    component_id: str | None
+    order_id: str | None
+    evidence_id: str | None
 
 
 class DecisionRequest(BaseModel):

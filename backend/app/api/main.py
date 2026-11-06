@@ -35,7 +35,7 @@ from app.database.tables import (
     SupplyChainEventRow,
     WorkflowRunRow,
 )
-from app.events import EventService
+from app.events import EmailIncidentService, EventService
 from app.evaluation import EvaluationRunner
 from app.events.service import EventValidationError
 from app.models.domain import DecisionType, EventType, HumanDecision, SupplyChainEvent
@@ -51,7 +51,17 @@ from app.services.workflow_runs import (
     WorkflowUpstreamUnavailableError,
 )
 
-from .schemas import ComplianceResponse, CriterionEvidence, DecisionRequest, DecisionResponse, EventIngestionResponse, IncidentReportResponse, StatusResponse
+from .schemas import (
+    ComplianceResponse,
+    CriterionEvidence,
+    DecisionRequest,
+    DecisionResponse,
+    EmailIncidentRequest,
+    EmailIncidentResponse,
+    EventIngestionResponse,
+    IncidentReportResponse,
+    StatusResponse,
+)
 
 
 def create_app(database_url: str | None = None) -> FastAPI:
@@ -120,6 +130,34 @@ def create_app(database_url: str | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail="direct incident creation requires MANUAL_INCIDENT")
         return create_event(event, session)
 
+    @application.post(
+        "/integrations/email/ingest",
+        response_model=EmailIncidentResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def ingest_email(
+        email: EmailIncidentRequest,
+        session: Session = Depends(db_session),
+    ) -> EmailIncidentResponse:
+        try:
+            GuardrailService.require_safe_text(email.model_dump_json())
+            result = EmailIncidentService(session).ingest(email)
+            return EmailIncidentResponse(
+                event_id=result.ingestion.event_id,
+                incident_id=result.ingestion.incident_id,
+                duplicate=result.ingestion.duplicate,
+                incident_created=result.ingestion.incident_created,
+                event_type=result.event_type.value,
+                supplier_id=result.supplier_id,
+                component_id=result.component_id,
+                order_id=result.order_id,
+                evidence_id=result.evidence_id,
+            )
+        except GuardrailViolation as exc:
+            raise HTTPException(status_code=422, detail=exc.result.detail) from exc
+        except EventValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     @application.get("/incidents")
     def list_incidents(session: Session = Depends(db_session)) -> list[dict]:
         rows = session.scalars(select(IncidentRow).order_by(IncidentRow.created_at.desc())).all()
@@ -165,7 +203,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
         )
         try:
             row = service.start(incident_id)
-            if os.getenv("VERCEL"):
+            if os.getenv("VERCEL") or os.getenv("K_SERVICE"):
                 await service.execute(incident_id, row.workflow_run_id)
                 with application.state.SessionFactory() as completed_session:
                     completed = completed_session.get(

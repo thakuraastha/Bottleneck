@@ -23,11 +23,11 @@ Expand **Containers, Networking, Security** and configure:
 | CPU | `2` | Reduces model orchestration latency |
 | Request timeout | `300 seconds` | Leaves room for model-provider latency |
 | Maximum instances | `1` | Prevents two instances from using separate temporary SQLite databases |
-| Minimum instances | `1` for the live demo, otherwise `0` | Avoids a cold start during the presentation; setting `1` costs money while idle |
+| Minimum instances | `0` | Scales to zero so there is no idle-instance charge |
 | Maximum concurrent requests | `20` | Allows dashboard polling while one workflow is active |
-| Billing | **Instance-based** | Keeps CPU available for the background workflow after `/run` returns |
+| Billing | **Request-based** | Uses CPU only during requests and stays eligible for Cloud Run's request-based free tier |
 
-Do not set concurrency to `1`: the dashboard polls status and agent output while the workflow runs.
+Do not set concurrency to `1`: the dashboard polls status and agent output while the synchronous Cloud Run workflow request remains open.
 
 ## Gemini secret
 

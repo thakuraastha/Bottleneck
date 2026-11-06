@@ -24,6 +24,7 @@ const ENDPOINTS = [
   ["GET", "/health", "API health and launcher readiness"],
   ["GET", "/dashboard/summary", "Operational KPIs and modeled exposure"],
   ["GET", "/incidents", "Persisted incident queue"],
+  ["POST", "/integrations/email/ingest", "Guarded email-to-incident ingestion with source evidence"],
   ["POST", "/incidents/{id}/run", "Background ADK + CrewAI + LangGraph investigation"],
   ["GET", "/incidents/{id}/audit", "Complete evidence and reasoning trail"],
   ["GET", "/incidents/{id}/simulation", "Deterministic daily supply projection"],
@@ -356,6 +357,30 @@ function agentOutputMarkup(output, placeholder = "Output will appear here while 
     <details class="agent-output"><summary>View complete output</summary><pre>${escapeHTML(text)}</pre></details>`;
 }
 
+function agentEvidenceMarkup(agent, output, outputs) {
+  const supplierStage = agent.name.includes("supplier") || agent.name === "recovery_planning_agent";
+  const evidenceOutput = supplierStage ? (outputs.alternative_supplier_research || output) : output;
+  const serialized = JSON.stringify(evidenceOutput || {});
+  const evidence = (state.audit?.evidence || []).filter((item) =>
+    serialized.includes(item.evidence_id)
+      || serialized.includes(item.source_record_id)
+      || (agent.name === "orchestrator_triage_agent" && item.source_system === "EMAIL")
+  );
+  const suppliers = state.suppliers.filter((item) =>
+    serialized.includes(item.supplier_id)
+      || (supplierStage && (state.audit?.supplier_candidates || []).some((candidate) => candidate.supplier_id === item.supplier_id))
+  );
+  const sources = evidence.map((item) => `${item.source_system} · ${item.source_record_id}`);
+  const supplierProof = suppliers.map((item) =>
+    `${item.supplier_id} · ${item.component_id} · Q${number(item.quality_score)} · ${number(item.available_capacity)} units`
+  );
+  const proof = [...new Set([...sources, ...supplierProof])];
+  return `<details class="agent-evidence" ${proof.length ? "" : "disabled"}>
+    <summary>Evidence & provenance <span>${proof.length}</span></summary>
+    ${proof.length ? `<ul>${proof.map((item) => `<li>${escapeHTML(item)}</li>`).join("")}</ul>` : `<p>No direct source references published yet.</p>`}
+  </details>`;
+}
+
 function renderAgents() {
   const latest = uniqueTopLevelAgents();
   const outputs = latestWorkflow()?.state?.agent_outputs || {};
@@ -377,6 +402,7 @@ function renderAgents() {
       <div class="agent-card-top"><span class="agent-number">STAGE ${String(index + 1).padStart(2, "0")}</span><span class="framework-badge">${escapeHTML(agent.framework)}</span></div>
       ${statusBadge(displayStatus)}<h3>${escapeHTML(agent.title)}</h3><p>${escapeHTML(agent.copy)}</p>
       ${agentOutputMarkup(output, pendingCopy)}
+      ${agentEvidenceMarkup(agent, output, outputs)}
       <div class="agent-meta"><span>${escapeHTML(run?.model_identifier || agent.framework)}</span><span>${run?.duration_ms == null ? "—" : `${number(run.duration_ms)} ms`}</span></div>
     </article>`;
   }).join("");
@@ -467,22 +493,60 @@ async function runInvestigation() {
   renderIncidents();
   notice("Investigation accepted. The dashboard will follow every stage live.");
   try {
-    const result = await request(`/incidents/${encodeURIComponent(state.selectedIncidentId)}/run`, { method: "POST" });
+    const runRequest = request(`/incidents/${encodeURIComponent(state.selectedIncidentId)}/run`, { method: "POST" });
+    let result = null;
     for (let attempt = 0; attempt < 240; attempt += 1) {
       await loadSelectedIncident();
       renderAll();
-      const workflow = state.audit?.workflow_runs?.find((item) => item.workflow_run_id === result.workflow_run_id);
+      const workflow = result
+        ? state.audit?.workflow_runs?.find((item) => item.workflow_run_id === result.workflow_run_id)
+        : latestWorkflow();
       if (workflow && workflow.status !== "RUNNING") {
+        result = await runRequest;
         await loadAll({ quiet: true });
         if (workflow.status === "COMPLETED") notice("All workflow stages completed and the audit trail is ready.", "success", 8000);
         else throw new Error(workflow.state?.error || "The investigation failed.");
         return;
+      }
+      if (!result) {
+        const settled = await Promise.race([
+          runRequest.then((value) => ({ value })),
+          new Promise((resolve) => window.setTimeout(() => resolve(null), 50)),
+        ]);
+        if (settled) result = settled.value;
       }
       await new Promise((resolve) => window.setTimeout(resolve, 1200));
     }
     throw new Error("The workflow is still running. Refresh to continue following it.");
   } catch (error) { notice(error.message, "error", 0); }
   finally { state.running = false; renderIncidents(); }
+}
+
+async function ingestEmail() {
+  const button = $("#ingest-email");
+  const resultNode = $("#email-ingestion-result");
+  const payload = {
+    message_id: $("#email-message-id").value.trim(),
+    sender: $("#email-sender").value.trim(),
+    subject: $("#email-subject").value.trim(),
+    body: $("#email-body").value.trim(),
+    received_at: new Date().toISOString(),
+  };
+  button.disabled = true;
+  resultNode.textContent = "Validating supplier and order references…";
+  try {
+    const result = await request("/integrations/email/ingest", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    await loadAll({ quiet: true });
+    await selectIncident(result.incident_id, true);
+    resultNode.textContent = `${humanize(result.event_type)} · ${result.supplier_id || "supplier inferred later"} · evidence saved`;
+    notice("Email converted to an incident with verified source evidence.", "success", 8000);
+  } catch (error) {
+    resultNode.textContent = error.message;
+    notice(error.message, "error", 0);
+  } finally { button.disabled = false; }
 }
 
 function recommendedStrategyId() {
@@ -541,6 +605,7 @@ $("#menu-button").addEventListener("click", () => {
 $("#sidebar-scrim").addEventListener("click", closeMenu);
 $("#refresh-button").addEventListener("click", () => void loadAll());
 $("#run-investigation").addEventListener("click", () => void runInvestigation());
+$("#ingest-email").addEventListener("click", () => void ingestEmail());
 $("#approve-button").addEventListener("click", () => void recordDecision("approve"));
 $("#reject-button").addEventListener("click", () => void recordDecision("reject"));
 $("#run-evaluation").addEventListener("click", () => void runEvaluation());

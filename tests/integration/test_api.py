@@ -57,6 +57,35 @@ def test_api_rejects_unknown_supplier(tmp_path: Path) -> None:
         assert "unknown supplier_id" in response.json()["detail"]
 
 
+def test_email_ingestion_creates_incident_and_source_evidence(tmp_path: Path) -> None:
+    url = f"sqlite:///{tmp_path / 'email-api.db'}"
+    seed(database_url=url, data_dir=ROOT / "data")
+    with TestClient(create_app(url)) as client:
+        payload = {
+            "message_id": "mail-supplier-delay-001",
+            "sender": "operations@supplier-a.example",
+            "subject": "SUP-A factory capacity failure for PO-X7-1001",
+            "body": "Supplier A cannot produce MOTOR-X7 and purchase order PO-X7-1001 will be delayed.",
+            "received_at": "2026-01-15T09:00:00Z",
+        }
+        response = client.post("/integrations/email/ingest", json=payload)
+        assert response.status_code == 201
+        result = response.json()
+        assert result["event_type"] == "SUPPLIER_CAPACITY_FAILURE"
+        assert result["supplier_id"] == "SUP-A"
+        assert result["component_id"] == "MOTOR-X7"
+        assert result["order_id"] == "PO-X7-1001"
+        audit = client.get(f"/incidents/{result['incident_id']}/audit").json()
+        assert audit["incident"]["source_event_id"] == result["event_id"]
+        assert audit["evidence"][0]["source_system"] == "EMAIL"
+        assert audit["evidence"][0]["source_record_id"] == payload["message_id"]
+
+        duplicate = client.post("/integrations/email/ingest", json=payload)
+        assert duplicate.status_code == 201
+        assert duplicate.json()["duplicate"] is True
+        assert len(client.get(f"/incidents/{result['incident_id']}/evidence").json()) == 1
+
+
 def test_evaluation_endpoint_persists_measured_results(tmp_path: Path) -> None:
     url = f"sqlite:///{tmp_path / 'api-evaluation.db'}"
     seed(database_url=url, data_dir=ROOT / "data")

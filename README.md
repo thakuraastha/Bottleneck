@@ -74,7 +74,7 @@ Open `http://127.0.0.1:3000` after both containers become healthy.
 
 The production container serves the dashboard, FastAPI endpoints, and A2A endpoint from one Cloud Run URL. It reads Cloud Run's assigned `PORT`, keeps the Gemini key in Secret Manager, and defaults to a seeded temporary SQLite database when a managed database is not configured.
 
-For a faculty demonstration with no local processes, connect the `main` branch to Cloud Run and use the exact settings in [`docs/CLOUD_RUN_DEPLOYMENT.md`](docs/CLOUD_RUN_DEPLOYMENT.md). Set maximum instances to `1` while using SQLite, and select instance-based billing so the asynchronous multi-agent workflow keeps receiving CPU after the start request returns.
+For a faculty demonstration with no local processes, connect the `main` branch to Cloud Run and use the exact settings in [`docs/CLOUD_RUN_DEPLOYMENT.md`](docs/CLOUD_RUN_DEPLOYMENT.md). Set maximum instances to `1`, minimum instances to `0`, and use request-based billing. In Cloud Run the workflow stays inside the `/run` request while the browser polls its persisted progress concurrently, so scale-to-zero does not interrupt agents.
 
 Temporary SQLite state can be reset by deploying a new revision, but it is not durable across instance replacement. For durable production history, set `BOTTLENECK_DATABASE_URL` to a managed SQL database before allowing more than one instance.
 

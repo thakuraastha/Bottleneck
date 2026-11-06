@@ -131,6 +131,17 @@
               <div><p class="eyebrow">Detection and response</p><h2>Incident command</h2></div>
               <button class="button button-primary" id="run-investigation">Run investigation</button>
             </div>
+            <article class="card email-ingestion-card">
+              <div class="card-header"><div><p class="eyebrow">Live integration</p><h3>Ingest supplier failure email</h3></div><span class="soft-badge">Email → Incident</span></div>
+              <p class="muted">Paste a real or demonstration supplier alert. The guarded parser matches known supplier, component, and purchase-order records, creates an incident, and preserves the email as verified evidence.</p>
+              <div class="email-form-grid">
+                <label class="field"><span>Message ID</span><input id="email-message-id" value="faculty-demo-email-001" maxlength="200" /></label>
+                <label class="field"><span>Sender</span><input id="email-sender" value="operations@supplier-a.example" maxlength="320" /></label>
+                <label class="field email-subject"><span>Subject</span><input id="email-subject" value="Urgent: SUP-A cannot deliver PO-X7-1001" maxlength="500" /></label>
+                <label class="field email-body"><span>Email body</span><textarea id="email-body" rows="4" maxlength="20000">Supplier A reports a factory capacity failure affecting MOTOR-X7. PO-X7-1001 will be delayed. Find qualified replacement suppliers and protect Motor X7 production.</textarea></label>
+              </div>
+              <div class="button-row"><button class="button button-primary" id="ingest-email">Create incident from email</button><span id="email-ingestion-result" class="muted">Ready to ingest</span></div>
+            </article>
             <div class="grid incident-layout">
               <article class="card incident-list-card">
                 <div class="card-header"><h3>Incident queue</h3><span id="incident-count" class="soft-badge">0 records</span></div>
