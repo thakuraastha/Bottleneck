@@ -135,8 +135,14 @@ function clearNotices(type) {
 function setApiOnline(online) {
   $("#api-status").classList.toggle("is-online", online);
   $("#api-status").innerHTML = `<span></span>${online ? "Live API" : "API offline"}`;
-  $("#system-state").textContent = online ? "Local system online" : "API unavailable";
+  const localFrontend = window.location.port === "3000" || window.location.protocol === "file:";
+  $("#system-state").textContent = online
+    ? `${localFrontend ? "Local" : "Cloud"} service online`
+    : "API unavailable";
 }
+
+const apiDocsLink = $("#api-docs-link");
+if (apiDocsLink) apiDocsLink.href = `${API_BASE}/docs`;
 
 function selectTab(name, updateHash = true) {
   const valid = $(`[data-panel="${name}"]`) ? name : "overview";
