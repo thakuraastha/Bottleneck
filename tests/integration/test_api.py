@@ -126,3 +126,17 @@ def test_live_run_requires_model_credential_without_creating_fake_logs(tmp_path:
         assert client.get(f"/incidents/{incident_id}/workflow").json() == {
             "workflow_runs": [], "agent_runs": []
         }
+
+
+def test_compliance_detects_cloud_run_hostname(tmp_path: Path) -> None:
+    url = f"sqlite:///{tmp_path / 'api-compliance.db'}"
+    seed(database_url=url, data_dir=ROOT / "data")
+    with TestClient(create_app(url), base_url="https://bottleneck-example.asia-south2.run.app") as client:
+        response = client.get("/system/compliance")
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["passed"] == result["total"] == 11
+    deployment = next(item for item in result["criteria"] if item["criterion"] == 11)
+    assert deployment["status"] == "PASS"
+    assert deployment["evidence"] == ["https://bottleneck-example.asia-south2.run.app"]

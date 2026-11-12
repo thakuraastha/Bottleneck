@@ -407,13 +407,18 @@ def create_app(database_url: str | None = None) -> FastAPI:
         return [_row_dict(row) for row in rows]
 
     @application.get("/system/compliance", response_model=ComplianceResponse)
-    def compliance(session: Session = Depends(db_session)) -> ComplianceResponse:
+    def compliance(request: Request, session: Session = Depends(db_session)) -> ComplianceResponse:
         settings = get_settings()
         workflow_count = len(session.scalars(select(WorkflowRunRow)).all())
         agent_event_count = len(session.scalars(select(AgentRunRow)).all())
         evidence_count = len(session.scalars(select(EvidenceRow)).all())
         evaluation_count = len(session.scalars(select(EvaluationRunRow)).all())
-        deployment_status = "PASS" if settings.cloud_deployment_url else "NEEDS_ACTION"
+        request_host = request.url.hostname or ""
+        detected_cloud_url = (
+            str(request.base_url).rstrip("/") if request_host.endswith(".run.app") else None
+        )
+        deployment_url = settings.cloud_deployment_url or detected_cloud_url
+        deployment_status = "PASS" if deployment_url else "NEEDS_ACTION"
         criteria = [
             CriterionEvidence(criterion=1, title="Context sharing and state updates", status="PASS", implementation="Google ADK session state carries namespaced outputs across triage, specialists, risk, planning, and reflection; the ADK state supervisor validates every required handoff before risk processing.", evidence=[f"{workflow_count} persisted workflow run(s)", "EventActions.state_delta updates shared state", "ADK session-state supervision"]),
             CriterionEvidence(criterion=2, title="MCP tool integration", status="PASS", implementation="ADK supplier and logistics agents consume a stdio MCP server, not direct Python functions.", evidence=["lookup_supplier", "lookup_supplier_orders", "lookup_order_shipments", "calculate_delay_days"]),
@@ -425,7 +430,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
             CriterionEvidence(criterion=8, title="Security guardrails", status="PASS", implementation="Deterministic API and ADK callbacks block prompt injection, threats, secret exposure, oversized inputs, and invalid tool payloads.", evidence=["before_model_callback", "before_tool_callback", "after_tool_callback", "/security/events"]),
             CriterionEvidence(criterion=9, title="Observability and provenance", status="PASS", implementation="Database-backed traces and live output snapshots link ADK and CrewAI stages to tool calls, evidence, model metadata, decisions, and security events.", evidence=[f"{evidence_count} provenance record(s)", "complete incident audit endpoint", "live agent_outputs snapshots"]),
             CriterionEvidence(criterion=10, title="End-to-end evaluation, cost, and runtime", status="PASS", implementation="The evaluation runner measures scenario quality and latest workflow runtime, token totals, failures, and configurable cost estimates.", evidence=[f"{evaluation_count} stored evaluation run(s)", "end_to_end_performance", "estimated_model_cost_usd"]),
-            CriterionEvidence(criterion=11, title="Cloud deployment", status=deployment_status, implementation="Google Cloud Run serves the dashboard, FastAPI service, ADK agents, CrewAI A2A endpoint, and static assets from one deployed container.", evidence=[settings.cloud_deployment_url or "Set BOTTLENECK_CLOUD_DEPLOYMENT_URL after the first cloud release"]),
+            CriterionEvidence(criterion=11, title="Cloud deployment", status=deployment_status, implementation="Google Cloud Run serves the dashboard, FastAPI service, ADK agents, CrewAI A2A endpoint, and static assets from one deployed container.", evidence=[deployment_url or "Set BOTTLENECK_CLOUD_DEPLOYMENT_URL after the first cloud release"]),
         ]
         return ComplianceResponse(
             project="Bottleneck",
