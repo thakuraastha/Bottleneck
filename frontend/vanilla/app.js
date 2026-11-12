@@ -10,7 +10,7 @@ const AGENTS = [
   { name: "logistics_intelligence_agent", title: "Logistics intelligence", framework: "Google ADK", outputKey: "investigation_logistics", copy: "Checks shipment state, revised ETA, and deterministic delay." },
   { name: "demand_inventory_agent", title: "Demand & inventory", framework: "Google ADK", outputKey: "investigation_inventory", copy: "Projects stock, demand, safety-stock breach, and shortage." },
   { name: "production_impact_agent", title: "Production impact", framework: "Google ADK", outputKey: "investigation_production", copy: "Connects component shortages to downtime and financial exposure." },
-  { name: "langgraph_state_supervisor", title: "Shared-state supervisor", framework: "LangGraph", outputKey: "langgraph_supervision", copy: "Validates ADK state handoffs before deterministic risk processing." },
+  { name: "adk_state_supervisor", title: "Shared-state supervisor", framework: "Google ADK", outputKey: "adk_state_supervision", copy: "Validates ADK session-state handoffs before deterministic risk processing." },
   { name: "risk_analyst_agent", title: "Risk analyst", framework: "Google ADK", outputKey: "risk_interpretation", copy: "Explains the deterministic risk score without modifying it." },
   { name: "alternative_supplier_agent", title: "Alternative supplier bridge", framework: "Google ADK + A2A", outputKey: "alternative_supplier_research", copy: "Routes authorized supplier research to the CrewAI service." },
   { name: "crewai_supplier_researcher", title: "Supplier researcher", framework: "CrewAI", outputKey: "crewai_supplier_researcher", copy: "Retrieves authorized synthetic supplier records." },
@@ -25,7 +25,7 @@ const ENDPOINTS = [
   ["GET", "/dashboard/summary", "Operational KPIs and modeled exposure"],
   ["GET", "/incidents", "Persisted incident queue"],
   ["POST", "/integrations/email/ingest", "Guarded email-to-incident ingestion with source evidence"],
-  ["POST", "/incidents/{id}/run", "Background ADK + CrewAI + LangGraph investigation"],
+  ["POST", "/incidents/{id}/run", "Background Google ADK + CrewAI investigation"],
   ["GET", "/incidents/{id}/audit", "Complete evidence and reasoning trail"],
   ["GET", "/incidents/{id}/simulation", "Deterministic daily supply projection"],
   ["POST", "/incidents/{id}/approve", "Human approval and local execution plan"],
@@ -205,10 +205,30 @@ async function loadSelectedIncident() {
     state.simulation = null;
     return;
   }
-  const encoded = encodeURIComponent(state.selectedIncidentId);
-  [state.audit, state.simulation] = await Promise.all([
-    request(`/incidents/${encoded}/audit`), optional(`/incidents/${encoded}/simulation`),
-  ]);
+  const loadDetails = async (incidentId) => {
+    const encoded = encodeURIComponent(incidentId);
+    return Promise.all([
+      request(`/incidents/${encoded}/audit`), optional(`/incidents/${encoded}/simulation`),
+    ]);
+  };
+  try {
+    [state.audit, state.simulation] = await loadDetails(state.selectedIncidentId);
+  } catch (error) {
+    if (error.status !== 404) throw error;
+    localStorage.removeItem("bottleneck-selected-incident");
+    state.incidents = await request("/incidents");
+    state.selectedIncidentId = state.incidents.find((item) => !["CLOSED", "FAILED"].includes(item.status))?.incident_id
+      || state.incidents[0]?.incident_id
+      || null;
+    if (!state.selectedIncidentId) {
+      state.audit = null;
+      state.simulation = null;
+      return;
+    }
+    localStorage.setItem("bottleneck-selected-incident", state.selectedIncidentId);
+    [state.audit, state.simulation] = await loadDetails(state.selectedIncidentId);
+    notice("The previous cloud session expired. Switched to the current deployed incident.", "info", 5000);
+  }
 }
 
 function selectedIncident() {
@@ -277,7 +297,7 @@ function renderCapabilities() {
     ["Deterministic simulation", state.simulation ? 1 : 0, "Daily stock and shortage projection"],
     ["Evidence aggregation", audit.evidence?.length || 0, "Source-linked verified facts"],
     ["Risk scoring", audit.risk_assessments?.length || 0, "Delivery, inventory, finance, production"],
-    ["Visible agent stages", uniqueTopLevelAgents().size, "ADK, CrewAI, and LangGraph"],
+    ["Visible agent stages", uniqueTopLevelAgents().size, "Google ADK and CrewAI"],
     ["Supplier research", audit.supplier_candidates?.length || 0, "Eligibility and rejection reasons"],
     ["Strategy validation", audit.strategy_evaluations?.length || 0, "Constraints and weighted scoring"],
     ["Human approval", audit.human_decisions?.length || 0, "Audited approve/reject decision"],
@@ -398,7 +418,7 @@ function renderAgents() {
     const displayStatus = run?.status || (output?.skipped ? "SKIPPED" : output ? "COMPLETED" : "PENDING");
     const pendingCopy = (() => {
       if (displayStatus === "RUNNING") return "Working now. This card updates as soon as the stage publishes evidence.";
-      if (agent.name === "langgraph_state_supervisor") return "Waiting for all four investigation agents to join. The supervisor itself normally completes in milliseconds.";
+      if (agent.name === "adk_state_supervisor") return "Waiting for all four investigation agents to join. The ADK state validator normally completes in milliseconds.";
       if (agent.name === "crewai_supplier_researcher") return "Queued behind the A2A bridge. It will retrieve authorized supplier records first.";
       if (agent.name === "crewai_supplier_analyst") return "Waiting for the Researcher output, then it will compare cost, capacity, quality, and lead time.";
       if (agent.name === "crewai_supplier_reviewer") return "Waiting for Researcher and Analyst outputs, then it will apply the final eligibility gate.";

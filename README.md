@@ -1,13 +1,13 @@
 # BOTTLENECK
 
-Multi-agent supply-chain disruption and recovery system built with Google ADK, CrewAI, LangGraph, FastAPI, vanilla HTML/CSS/JavaScript, SQLAlchemy, and SQLite.
+Multi-agent supply-chain disruption and recovery system built with Google ADK, CrewAI, FastAPI, vanilla HTML/CSS/JavaScript, SQLAlchemy, and SQLite.
 
 ## What works
 
 - Synthetic Motor X7 supplier-delay scenario with repeatable CSV generation and database seeding.
 - Four read-only MCP supply-chain tools, daily inventory/production simulation, deterministic risk, strategy scoring, and mandatory constraints.
-- Nine typed ADK agents, real graph fan-out/join investigation, a CrewAI Researcher/Analyst/Reviewer crew reached through A2A JSON-RPC, and a LangGraph shared-state supervisor.
-- Live frontend cards expose every persisted ADK, CrewAI, and LangGraph output while the workflow is running.
+- Typed ADK agents with parallel fan-out/join investigation and an ADK session-state supervisor, plus a CrewAI Researcher/Analyst/Reviewer crew reached through A2A JSON-RPC.
+- Live frontend cards expose every persisted ADK and CrewAI output while the workflow is running.
 - Evidence provenance, explicit conditional routing, bounded replanning, incident memory, and guarded human approval.
 - Idempotent event ingestion, 22-table persistence model, FastAPI endpoints, and a responsive operations dashboard.
 - ADK agent/model/tool callbacks that validate inputs and persist real execution events, errors, token usage, and security blocks.

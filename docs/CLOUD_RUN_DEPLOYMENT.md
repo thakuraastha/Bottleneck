@@ -1,6 +1,6 @@
 # Deploy Bottleneck from GitHub to Google Cloud Run
 
-This deployment runs the dashboard, API, ADK agents, CrewAI crew, LangGraph supervisor, and A2A endpoint in a single public Cloud Run service. No process needs to run on the presentation laptop.
+This deployment runs the dashboard, API, Google ADK agents, CrewAI crew, and A2A endpoint in a single public Cloud Run service. No process needs to run on the presentation laptop.
 
 ## One-time Google Cloud setup
 
@@ -62,7 +62,7 @@ Open the Cloud Run URL and check:
 2. `/docs` opens the FastAPI documentation.
 3. The dashboard Overview shows seeded incidents.
 4. On **Incidents**, start one investigation.
-5. On **Agents**, confirm cards move through running to completed and show ADK, CrewAI, and LangGraph outputs.
+5. On **Agents**, confirm cards move through running to completed and show Google ADK and CrewAI outputs.
 6. On **Recovery**, approve or reject a strategy.
 7. On **Audit/Evaluation**, show the persisted evidence, callbacks, timing, token, and cost records.
 

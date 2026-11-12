@@ -54,7 +54,7 @@ from app.observability import AdkObservabilityCallbacks
 from app.orchestration import (
     ConditionalRouter,
     build_investigation_workflow,
-    run_langgraph_supervisor,
+    run_adk_state_supervisor,
 )
 from app.services.evidence import EvidenceAggregator
 from app.services.strategy_pipeline import StrategyPipeline, StrategyPipelineResult
@@ -92,7 +92,7 @@ class IncidentWorkflowService:
         "investigation_logistics",
         "investigation_inventory",
         "investigation_production",
-        "langgraph_supervision",
+        "adk_state_supervision",
         "risk_interpretation",
         "alternative_supplier_research",
         "recovery_proposals",
@@ -192,17 +192,17 @@ class IncidentWorkflowService:
 
             self._progress(
                 workflow_run_id,
-                "LANGGRAPH_SUPERVISION",
-                "LangGraph validating shared ADK state",
+                "ADK_STATE_SUPERVISION",
+                "ADK supervisor validating shared session state",
                 40,
             )
-            graph_output = self._run_langgraph_stage(
+            supervision_output = self._run_adk_supervision_stage(
                 incident_id, workflow_run_id, state
             )
             await self._inject_state(
                 adk_sessions,
                 adk_session_id,
-                {"langgraph_supervision": graph_output},
+                {"adk_state_supervision": supervision_output},
             )
             state = await self._state(adk_sessions, adk_session_id)
             self._publish_agent_outputs(workflow_run_id, state)
@@ -834,7 +834,7 @@ class IncidentWorkflowService:
             )
             session.commit()
 
-    def _run_langgraph_stage(
+    def _run_adk_supervision_stage(
         self,
         incident_id: str,
         workflow_run_id: str,
@@ -849,11 +849,11 @@ class IncidentWorkflowService:
                     execution_id=execution_id,
                     incident_id=incident_id,
                     workflow_run_id=workflow_run_id,
-                    agent_name="langgraph_state_supervisor",
+                    agent_name="adk_state_supervisor",
                     start_time=started,
                     status="RUNNING",
                     retry_count=0,
-                    model_identifier="langgraph/StateGraph",
+                    model_identifier="google-adk/session-state",
                     token_usage={},
                 )
             )
@@ -866,7 +866,7 @@ class IncidentWorkflowService:
             "investigation_production",
         ]
         try:
-            result = run_langgraph_supervisor(
+            result = run_adk_state_supervisor(
                 incident_id=incident_id,
                 shared_state=state,
                 required_outputs=required,

@@ -22,7 +22,6 @@ agents = [
   "google-adk>=2.10,<3",
   "google-api-core==2.28.1",
   "crewai>=1.15,<2",
-  "langgraph>=1.0,<2",
   "litellm>=1.60,<2",
   "mcp>=1.28,<2",
 ]
