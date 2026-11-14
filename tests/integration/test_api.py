@@ -106,6 +106,27 @@ def test_email_subject_prioritizes_failed_replacement_supplier(tmp_path: Path) -
         assert incident["supplier_id"] == "SUP-B"
 
 
+def test_email_supplier_failure_phrase_does_not_match_supplier_f(tmp_path: Path) -> None:
+    url = f"sqlite:///{tmp_path / 'supplier-boundary-email-api.db'}"
+    seed(database_url=url, data_dir=ROOT / "data")
+    with TestClient(create_app(url)) as client:
+        response = client.post("/integrations/email/ingest", json={
+            "message_id": "gmail-synthetic-supplier-a",
+            "sender": "aastha.thakur.23cse@bmu.edu.in",
+            "subject": "[SYNTHETIC DEMO] Supplier failure: SUP-A cannot deliver PO-X7-1001",
+            "body": (
+                "SYNTHETIC DEMO DATA. Supplier A (SUP-A) reports a factory "
+                "capacity failure affecting component MOTOR-X7."
+            ),
+            "received_at": "2026-11-14T20:49:00+05:30",
+        })
+
+        assert response.status_code == 201
+        result = response.json()
+        assert result["supplier_id"] == "SUP-A"
+        assert result["event_type"] == "SUPPLIER_CAPACITY_FAILURE"
+
+
 def test_evaluation_endpoint_persists_measured_results(tmp_path: Path) -> None:
     url = f"sqlite:///{tmp_path / 'api-evaluation.db'}"
     seed(database_url=url, data_dir=ROOT / "data")

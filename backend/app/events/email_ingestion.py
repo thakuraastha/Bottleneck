@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -147,7 +148,16 @@ class EmailIncidentService:
                 supplier.supplier_id.lower().replace("sup-", "supplier-"),
             )
             for source_priority, source in enumerate(sources):
-                positions = [source.find(alias) for alias in aliases if alias in source]
+                positions = [
+                    match.start()
+                    for alias in aliases
+                    if (
+                        match := re.search(
+                            rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])",
+                            source,
+                        )
+                    )
+                ]
                 if positions:
                     matches.append((source_priority, min(positions), supplier))
                     break
