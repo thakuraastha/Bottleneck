@@ -941,6 +941,16 @@ class IncidentWorkflowService:
     ) -> None:
         now = datetime.now(timezone.utc)
         with self.sessions() as session:
+            prior_failures = session.scalars(
+                select(AgentRunRow).where(
+                    AgentRunRow.workflow_run_id == workflow_run_id,
+                    AgentRunRow.agent_name == agent_name,
+                    AgentRunRow.tool_name.is_(None),
+                    AgentRunRow.status == "FAILED",
+                )
+            ).all()
+            for row in prior_failures:
+                row.status = "RECOVERED"
             session.add(
                 AgentRunRow(
                     execution_id=str(uuid4()),
