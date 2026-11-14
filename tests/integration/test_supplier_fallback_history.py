@@ -4,6 +4,11 @@ from pathlib import Path
 from app.config import Settings
 from app.database import build_engine, session_factory
 from app.database.tables import IncidentRow
+from app.models.investigations import (
+    ProposedAllocation,
+    ProposedStrategy,
+    RecoveryPlanningOutput,
+)
 from app.services.workflow_runs import IncidentWorkflowService
 from scripts.seed_database import seed
 
@@ -96,3 +101,40 @@ def test_supplier_a_failure_offers_full_and_split_choices(tmp_path: Path) -> Non
 
     assert choices["FULL_SWITCH"] == {"SUP-C"}
     assert choices["SPLIT_ORDER"] == {"SUP-B", "SUP-C"}
+
+
+def test_merge_discards_model_plan_that_reuses_failed_supplier() -> None:
+    model_plan = RecoveryPlanningOutput(
+        incident_id="INC-B",
+        proposals=[
+            ProposedStrategy(
+                strategy_type="PARTIAL_SWITCH",
+                allocations=[
+                    ProposedAllocation(supplier_id="SUP-A", quantity=900),
+                    ProposedAllocation(supplier_id="SUP-D", quantity=100),
+                ],
+                rationale="Model-generated proposal that incorrectly reuses a failed supplier.",
+            )
+        ],
+    )
+    deterministic_plan = RecoveryPlanningOutput(
+        incident_id="INC-B",
+        proposals=[
+            ProposedStrategy(
+                strategy_type="FULL_SWITCH",
+                allocations=[
+                    ProposedAllocation(supplier_id="SUP-C", quantity=1000),
+                ],
+                rationale="Qualified replacement supplier.",
+            )
+        ],
+    )
+
+    merged = IncidentWorkflowService._merge_recovery_plans(
+        model_plan,
+        deterministic_plan,
+        disallowed_supplier_ids={"SUP-A", "SUP-B"},
+    )
+
+    assert len(merged.proposals) == 1
+    assert merged.proposals[0].allocations[0].supplier_id == "SUP-C"

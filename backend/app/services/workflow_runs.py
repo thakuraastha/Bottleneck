@@ -334,7 +334,13 @@ class IncidentWorkflowService:
                         incident_id, payload.get("component_id"), required_quantity
                     )
                 )
-                plan = self._merge_recovery_plans(plan, deterministic_plan)
+                plan = self._merge_recovery_plans(
+                    plan,
+                    deterministic_plan,
+                    disallowed_supplier_ids=self._disallowed_supplier_ids(
+                        incident_id, payload.get("component_id")
+                    ),
+                )
                 last_pipeline = self._evaluate_and_persist(
                     incident_id,
                     workflow_run_id,
@@ -866,14 +872,49 @@ class IncidentWorkflowService:
             and row.status != "CLOSED"
         }
 
+    def _disallowed_supplier_ids(
+        self, incident_id: str, component_id: str | None
+    ) -> set[str]:
+        """Return current and previously failed suppliers that plans must not reuse."""
+        with self.sessions() as session:
+            incident = session.get(IncidentRow, incident_id)
+            disallowed = {
+                incident.supplier_id
+                for incident in [incident]
+                if incident is not None and incident.supplier_id
+            }
+            if component_id:
+                disallowed.update(
+                    self._failed_supplier_ids(session, component_id, incident_id)
+                )
+        return disallowed
+
     @staticmethod
     def _merge_recovery_plans(
         model_plan: RecoveryPlanningOutput,
         deterministic_plan: RecoveryPlanningOutput,
+        *,
+        disallowed_supplier_ids: set[str] | None = None,
     ) -> RecoveryPlanningOutput:
         proposals: list[ProposedStrategy] = []
         signatures: set[tuple] = set()
+        disallowed = disallowed_supplier_ids or set()
         for proposal in [*model_plan.proposals, *deterministic_plan.proposals]:
+            if any(
+                allocation.supplier_id in disallowed
+                for allocation in proposal.allocations
+            ):
+                logger.warning(
+                    "Discarding recovery proposal that reuses a failed supplier: %s",
+                    sorted(
+                        {
+                            allocation.supplier_id
+                            for allocation in proposal.allocations
+                            if allocation.supplier_id in disallowed
+                        }
+                    ),
+                )
+                continue
             signature = (
                 proposal.strategy_type,
                 tuple(
