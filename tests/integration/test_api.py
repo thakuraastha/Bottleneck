@@ -86,6 +86,26 @@ def test_email_ingestion_creates_incident_and_source_evidence(tmp_path: Path) ->
         assert len(client.get(f"/incidents/{result['incident_id']}/evidence").json()) == 1
 
 
+def test_email_subject_prioritizes_failed_replacement_supplier(tmp_path: Path) -> None:
+    url = f"sqlite:///{tmp_path / 'replacement-email-api.db'}"
+    seed(database_url=url, data_dir=ROOT / "data")
+    with TestClient(create_app(url)) as client:
+        response = client.post("/integrations/email/ingest", json={
+            "message_id": "mail-replacement-b-failure-001",
+            "sender": "operations@supplier-b.example",
+            "subject": "SUP-B cannot cover MOTOR-X7 replacement for PO-X7-1001",
+            "body": "Supplier B cannot provide the replacement after Supplier A failed.",
+            "received_at": "2026-01-16T09:00:00Z",
+        })
+        assert response.status_code == 201
+        result = response.json()
+        assert result["event_type"] == "SUPPLIER_CAPACITY_FAILURE"
+        assert result["supplier_id"] == "SUP-B"
+        assert result["order_id"] == "PO-X7-1001"
+        incident = client.get(f"/incidents/{result['incident_id']}").json()
+        assert incident["supplier_id"] == "SUP-B"
+
+
 def test_evaluation_endpoint_persists_measured_results(tmp_path: Path) -> None:
     url = f"sqlite:///{tmp_path / 'api-evaluation.db'}"
     seed(database_url=url, data_dir=ROOT / "data")

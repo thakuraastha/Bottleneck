@@ -116,7 +116,10 @@ class EventService:
             order = self.session.get(PurchaseOrderRow, order_id)
             if order is None:
                 raise EventValidationError(f"unknown order_id: {order_id}")
-            if supplier_id and order.supplier_id != supplier_id:
+            replacement_context = bool(event.payload.get("replacement_supplier_context"))
+            if supplier_id and order.supplier_id != supplier_id and not (
+                event.source_system == "EMAIL" and replacement_context
+            ):
                 raise EventValidationError("order_id does not belong to supplier_id")
             if component_id and order.component_id != component_id:
                 raise EventValidationError("order_id does not match component_id")

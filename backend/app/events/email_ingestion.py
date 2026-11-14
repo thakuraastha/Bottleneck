@@ -41,15 +41,7 @@ class EmailIncidentService:
     def ingest(self, email: EmailPayload) -> EmailIngestionResult:
         searchable = f"{email.subject}\n{email.body}".lower()
         suppliers = self.session.scalars(select(SupplierRow)).all()
-        supplier = next(
-            (
-                row
-                for row in suppliers
-                if row.supplier_id.lower() in searchable
-                or row.supplier_name.lower() in searchable
-            ),
-            None,
-        )
+        supplier = self._match_supplier(suppliers, email)
         orders = self.session.scalars(select(PurchaseOrderRow)).all()
         order = next((row for row in orders if row.order_id.lower() in searchable), None)
         if order is None and supplier is not None:
@@ -71,6 +63,9 @@ class EmailIncidentService:
             )
 
         event_type = self._classify(searchable)
+        replacement_supplier_context = bool(
+            supplier and order and order.supplier_id != supplier.supplier_id
+        )
         event = SupplyChainEvent(
             event_type=event_type,
             source_system="EMAIL",
@@ -82,6 +77,7 @@ class EmailIncidentService:
                 "supplier_id": supplier.supplier_id if supplier else None,
                 "component_id": component_id,
                 "order_id": order.order_id if order else None,
+                "replacement_supplier_context": replacement_supplier_context,
                 "email_message_id": email.message_id,
                 "email_sender": email.sender,
             },
@@ -126,10 +122,33 @@ class EmailIncidentService:
     def _classify(text: str) -> EventType:
         if any(word in text for word in ("quality", "defect", "rejected", "inspection")):
             return EventType.QUALITY_FAILURE
-        if any(word in text for word in ("capacity", "shutdown", "factory failure", "cannot produce")):
+        if any(word in text for word in (
+            "capacity", "shutdown", "factory failure", "cannot produce",
+            "cannot provide", "cannot cover", "unable to supply",
+        )):
             return EventType.SUPPLIER_CAPACITY_FAILURE
         if any(word in text for word in ("price", "surcharge", "cost increase")):
             return EventType.PRICE_INCREASE
         if any(word in text for word in ("shipment", "transit", "port", "logistics")):
             return EventType.SHIPMENT_DELAY
         return EventType.SUPPLIER_DELAY
+
+    @staticmethod
+    def _match_supplier(
+        suppliers: list[SupplierRow], email: EmailPayload
+    ) -> SupplierRow | None:
+        """Prefer explicit subject mentions before sender and body mentions."""
+        sources = (email.subject.lower(), email.sender.lower(), email.body.lower())
+        matches: list[tuple[int, int, SupplierRow]] = []
+        for supplier in suppliers:
+            aliases = (
+                supplier.supplier_id.lower(),
+                supplier.supplier_name.lower(),
+                supplier.supplier_id.lower().replace("sup-", "supplier-"),
+            )
+            for source_priority, source in enumerate(sources):
+                positions = [source.find(alias) for alias in aliases if alias in source]
+                if positions:
+                    matches.append((source_priority, min(positions), supplier))
+                    break
+        return min(matches, key=lambda item: (item[0], item[1]))[2] if matches else None
