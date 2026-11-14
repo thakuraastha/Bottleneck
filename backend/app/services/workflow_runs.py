@@ -267,7 +267,7 @@ class IncidentWorkflowService:
                     fallback_agent_name="alternative_supplier_agent",
                     fallback_output_key="alternative_supplier_research",
                     fallback_value=lambda: self._deterministic_supplier_research(
-                        payload.get("component_id"), required_quantity
+                        incident_id, payload.get("component_id"), required_quantity
                     ),
                 )
                 state = await self._state(adk_sessions, adk_session_id)
@@ -329,6 +329,12 @@ class IncidentWorkflowService:
                 state = await self._state(adk_sessions, adk_session_id)
                 self._publish_agent_outputs(workflow_run_id, state)
                 plan = RecoveryPlanningOutput.model_validate(state.get("recovery_proposals"))
+                deterministic_plan = RecoveryPlanningOutput.model_validate(
+                    self._deterministic_recovery_plan(
+                        incident_id, payload.get("component_id"), required_quantity
+                    )
+                )
+                plan = self._merge_recovery_plans(plan, deterministic_plan)
                 last_pipeline = self._evaluate_and_persist(
                     incident_id,
                     workflow_run_id,
@@ -691,13 +697,16 @@ class IncidentWorkflowService:
             }
 
     def _deterministic_supplier_research(
-        self, component_id: str | None, requested_quantity: int
+        self, incident_id: str, component_id: str | None, requested_quantity: int
     ) -> dict[str, Any]:
         if not component_id:
             return {"component_id": None, "requested_quantity": requested_quantity, "candidates": []}
         with self.sessions() as session:
             suppliers = SupplyChainTools(session).get_component_suppliers(
                 component_id, active_only=False
+            )
+            failed_supplier_ids = self._failed_supplier_ids(
+                session, component_id, incident_id
             )
         candidates = []
         for supplier in suppliers:
@@ -708,6 +717,8 @@ class IncidentWorkflowService:
                 reasons.append("quality is below the configured minimum")
             if supplier.available_capacity <= 0:
                 reasons.append("no available capacity")
+            if supplier.supplier_id in failed_supplier_ids:
+                reasons.append("supplier has an active failure incident")
             candidates.append(
                 {
                     **supplier.model_dump(mode="json"),
@@ -761,31 +772,70 @@ class IncidentWorkflowService:
         with self.sessions() as session:
             incident = session.get(IncidentRow, incident_id)
             suppliers = SupplyChainTools(session).get_component_suppliers(component_id)
+            failed_supplier_ids = self._failed_supplier_ids(
+                session, component_id, incident_id
+            )
         eligible = sorted(
             [
                 item
                 for item in suppliers
                 if item.supplier_id != (incident.supplier_id if incident else None)
+                and item.supplier_id not in failed_supplier_ids
                 and item.quality_score >= self.settings.minimum_quality_score
                 and item.available_capacity > 0
             ],
             key=lambda item: (item.lead_time_days, item.unit_price),
         )
-        remaining = required_quantity
-        allocations: list[ProposedAllocation] = []
-        for supplier in eligible:
-            quantity = min(remaining, supplier.available_capacity)
-            if quantity:
-                allocations.append(
-                    ProposedAllocation(
-                        supplier_id=supplier.supplier_id,
-                        quantity=quantity,
-                        expedite=False,
+        proposals: list[ProposedStrategy] = []
+        if required_quantity:
+            for supplier in eligible:
+                if supplier.available_capacity >= required_quantity:
+                    proposals.append(
+                        ProposedStrategy(
+                            strategy_type="FULL_SWITCH",
+                            allocations=[
+                                ProposedAllocation(
+                                    supplier_id=supplier.supplier_id,
+                                    quantity=required_quantity,
+                                    expedite=False,
+                                )
+                            ],
+                            rationale=(
+                                f"{supplier.supplier_id} can cover the complete requirement; "
+                                "cost, lead time, quality, and residual risk remain visible for human comparison."
+                            ),
+                        )
+                    )
+
+            standard_suppliers = [item for item in eligible if not item.expedite_supported]
+            split_pool = standard_suppliers if sum(item.available_capacity for item in standard_suppliers) >= required_quantity else eligible
+            remaining = required_quantity
+            split_allocations: list[ProposedAllocation] = []
+            for supplier in split_pool:
+                quantity = min(remaining, supplier.available_capacity)
+                if quantity:
+                    split_allocations.append(
+                        ProposedAllocation(
+                            supplier_id=supplier.supplier_id,
+                            quantity=quantity,
+                            expedite=False,
+                        )
+                    )
+                    remaining -= quantity
+                if remaining <= 0:
+                    break
+            if remaining <= 0 and len(split_allocations) > 1:
+                proposals.append(
+                    ProposedStrategy(
+                        strategy_type="SPLIT_ORDER",
+                        allocations=split_allocations,
+                        rationale=(
+                            "Splits the requirement across qualified suppliers so the approver can "
+                            "compare diversification against a full switch."
+                        ),
+                        assumptions=["No supplier with an active failure incident is reused."],
                     )
                 )
-                remaining -= quantity
-            if remaining <= 0:
-                break
         if required_quantity == 0:
             proposals = [
                 ProposedStrategy(
@@ -794,23 +844,56 @@ class IncidentWorkflowService:
                     rationale="No outstanding order quantity remains.",
                 )
             ]
-        elif remaining > 0:
-            proposals = []
-        else:
-            proposals = [
-                ProposedStrategy(
-                    strategy_type="FULL_SWITCH" if len(allocations) == 1 else "SPLIT_ORDER",
-                    allocations=allocations,
-                    rationale="Covers outstanding quantity using active, quality-qualified persisted suppliers.",
-                    assumptions=["Arrival dates and cost are calculated by the deterministic pipeline."],
-                )
-            ]
         return RecoveryPlanningOutput(
             incident_id=incident_id,
             proposals=proposals,
             escalation_required=not proposals,
             escalation_reason="Qualified capacity is insufficient." if not proposals else None,
         ).model_dump(mode="json")
+
+    @staticmethod
+    def _failed_supplier_ids(
+        session: Session, component_id: str, current_incident_id: str
+    ) -> set[str]:
+        rows = session.scalars(
+            select(IncidentRow).where(IncidentRow.component_id == component_id)
+        ).all()
+        return {
+            row.supplier_id
+            for row in rows
+            if row.incident_id != current_incident_id
+            and row.supplier_id
+            and row.status != "CLOSED"
+        }
+
+    @staticmethod
+    def _merge_recovery_plans(
+        model_plan: RecoveryPlanningOutput,
+        deterministic_plan: RecoveryPlanningOutput,
+    ) -> RecoveryPlanningOutput:
+        proposals: list[ProposedStrategy] = []
+        signatures: set[tuple] = set()
+        for proposal in [*model_plan.proposals, *deterministic_plan.proposals]:
+            signature = (
+                proposal.strategy_type,
+                tuple(
+                    sorted(
+                        (allocation.supplier_id, allocation.quantity, allocation.expedite)
+                        for allocation in proposal.allocations
+                    )
+                ),
+            )
+            if signature not in signatures:
+                signatures.add(signature)
+                proposals.append(proposal)
+        return RecoveryPlanningOutput(
+            incident_id=model_plan.incident_id,
+            proposals=proposals,
+            escalation_required=not proposals,
+            escalation_reason=(
+                model_plan.escalation_reason or deterministic_plan.escalation_reason
+            ) if not proposals else None,
+        )
 
     def _record_fallback_agent(
         self, incident_id: str, workflow_run_id: str, agent_name: str
