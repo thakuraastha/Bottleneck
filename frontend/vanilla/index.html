@@ -132,15 +132,19 @@
               <button class="button button-primary" id="run-investigation">Run investigation</button>
             </div>
             <article class="card email-ingestion-card">
-              <div class="card-header"><div><p class="eyebrow">Supplier mailbox</p><h3>Send a supplier failure email</h3></div><span class="soft-badge">Email → Incident</span></div>
-              <p class="muted">Compose the supplier alert below. Sending it creates a verified inbox record, converts the message into an incident, and immediately refreshes the queue. If the failed supplier cannot fulfill the order, the agents compare the next qualified suppliers and can recommend one supplier or a capacity-aware split for your approval.</p>
+              <div class="card-header"><div><p class="eyebrow">Supplier email intake</p><h3>Process a supplier failure email</h3></div><span class="soft-badge">Gmail / Form → Incident</span></div>
+              <p class="muted">Every submission receives a new message ID, becomes verified email evidence, appears in the incident queue, and starts the cloud agents. Use the scenario buttons for a reliable A → B → C faculty demonstration.</p>
+              <div class="button-row scenario-buttons">
+                <button class="button button-secondary" id="load-supplier-a-email" type="button">1. Supplier A fails</button>
+                <button class="button button-secondary" id="load-supplier-b-email" type="button">2. Supplier B also fails</button>
+              </div>
               <div class="email-form-grid">
-                <label class="field"><span>Message ID</span><input id="email-message-id" value="faculty-demo-email-001" maxlength="200" /></label>
                 <label class="field"><span>Sender</span><input id="email-sender" value="operations@supplier-a.example" maxlength="320" /></label>
                 <label class="field email-subject"><span>Subject</span><input id="email-subject" value="Urgent: SUP-A cannot deliver PO-X7-1001" maxlength="500" /></label>
                 <label class="field email-body"><span>Email body</span><textarea id="email-body" rows="4" maxlength="20000">Supplier A reports a factory capacity failure affecting MOTOR-X7. PO-X7-1001 will be delayed. Find qualified replacement suppliers and protect Motor X7 production.</textarea></label>
               </div>
-              <div class="button-row"><button class="button button-primary" id="ingest-email">Send email to Bottleneck</button><span id="email-ingestion-result" class="muted">Mailbox ready</span></div>
+              <label class="checkbox-row"><input id="auto-run-email" type="checkbox" checked /> <span>Start all agents automatically after the email is received</span></label>
+              <div class="button-row"><button class="button button-primary" id="ingest-email">Process email and create incident</button><span id="email-ingestion-result" class="muted">Cloud email intake ready</span></div>
             </article>
             <div class="grid incident-layout">
               <article class="card incident-list-card">

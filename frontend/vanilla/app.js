@@ -551,8 +551,9 @@ async function runInvestigation() {
 async function ingestEmail() {
   const button = $("#ingest-email");
   const resultNode = $("#email-ingestion-result");
+  const messageId = `bottleneck-ui-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   const payload = {
-    message_id: $("#email-message-id").value.trim(),
+    message_id: messageId,
     sender: $("#email-sender").value.trim(),
     subject: $("#email-subject").value.trim(),
     body: $("#email-body").value.trim(),
@@ -567,12 +568,27 @@ async function ingestEmail() {
     });
     await loadAll({ quiet: true });
     await selectIncident(result.incident_id, true);
-    resultNode.textContent = `${humanize(result.event_type)} · ${result.supplier_id || "supplier inferred later"} · inbox evidence saved`;
-    notice("Email received. The incident queue and verified evidence are now updated.", "success", 8000);
+    resultNode.textContent = `${humanize(result.event_type)} · ${result.supplier_id || "supplier inferred later"} · new evidence ${result.evidence_id?.slice(0, 8) || "saved"}`;
+    notice("Email received. A new message ID, incident record, and verified evidence are visible.", "success", 8000);
+    if ($("#auto-run-email").checked && result.incident_id && !state.running) {
+      await runInvestigation();
+    }
   } catch (error) {
     resultNode.textContent = error.message;
     notice(error.message, "error", 0);
   } finally { button.disabled = false; }
+}
+
+function loadSupplierEmailScenario(supplierId) {
+  const isSupplierB = supplierId === "SUP-B";
+  $("#email-sender").value = isSupplierB ? "operations@supplier-b.example" : "operations@supplier-a.example";
+  $("#email-subject").value = isSupplierB
+    ? "SUP-B cannot cover MOTOR-X7 replacement for PO-X7-1001"
+    : "Urgent: SUP-A cannot deliver PO-X7-1001";
+  $("#email-body").value = isSupplierB
+    ? "Supplier B cannot provide the replacement after Supplier A failed. MOTOR-X7 for PO-X7-1001 remains at risk. Find the next qualified supplier."
+    : "Supplier A reports a factory capacity failure affecting MOTOR-X7. PO-X7-1001 will be delayed. Compare Supplier B, Supplier C, and capacity-aware split options for human approval.";
+  $("#email-ingestion-result").textContent = `${supplierId} scenario loaded · click Process email`;
 }
 
 function recommendedStrategyId() {
@@ -632,6 +648,8 @@ $("#sidebar-scrim").addEventListener("click", closeMenu);
 $("#refresh-button").addEventListener("click", () => void loadAll());
 $("#run-investigation").addEventListener("click", () => void runInvestigation());
 $("#ingest-email").addEventListener("click", () => void ingestEmail());
+$("#load-supplier-a-email").addEventListener("click", () => loadSupplierEmailScenario("SUP-A"));
+$("#load-supplier-b-email").addEventListener("click", () => loadSupplierEmailScenario("SUP-B"));
 $("#approve-button").addEventListener("click", () => void recordDecision("approve"));
 $("#reject-button").addEventListener("click", () => void recordDecision("reject"));
 $("#run-evaluation").addEventListener("click", () => void runEvaluation());
