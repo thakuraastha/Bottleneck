@@ -559,7 +559,7 @@ async function ingestEmail() {
     received_at: new Date().toISOString(),
   };
   button.disabled = true;
-  resultNode.textContent = "Validating supplier and order references…";
+  resultNode.textContent = "Sending and validating supplier references…";
   try {
     const result = await request("/integrations/email/ingest", {
       method: "POST",
@@ -567,8 +567,8 @@ async function ingestEmail() {
     });
     await loadAll({ quiet: true });
     await selectIncident(result.incident_id, true);
-    resultNode.textContent = `${humanize(result.event_type)} · ${result.supplier_id || "supplier inferred later"} · evidence saved`;
-    notice("Email converted to an incident with verified source evidence.", "success", 8000);
+    resultNode.textContent = `${humanize(result.event_type)} · ${result.supplier_id || "supplier inferred later"} · inbox evidence saved`;
+    notice("Email received. The incident queue and verified evidence are now updated.", "success", 8000);
   } catch (error) {
     resultNode.textContent = error.message;
     notice(error.message, "error", 0);
